@@ -1,0 +1,366 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>NovaNav | Campus Navigation & Admin Portal</title>
+  <meta name="description" content="Interactive Campus Navigation System with real-time route pathfinding, accessibility routing, and Administrator Portal.">
+  
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&family=Outfit:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+  
+  <link rel="stylesheet" href="style.css">
+</head>
+<body class="dark-theme">
+  <header class="app-header">
+    <div class="header-brand">
+      <div class="brand-icon">🧭</div>
+      <div class="brand-text">
+        <h1>NovaNav</h1>
+        <span class="brand-sub">Campus Navigation & Route Planner</span>
+      </div>
+    </div>
+
+    <div class="header-center">
+      <div class="search-box">
+        <span class="search-icon">🔍</span>
+        <input type="text" id="global-search" placeholder="Search buildings, labs, dining, libraries..." autocomplete="off">
+        <button id="clear-search" class="btn-icon hidden" title="Clear Search">✕</button>
+        <div id="search-results-dropdown" class="search-dropdown hidden"></div>
+      </div>
+    </div>
+
+    <div class="header-actions">
+      <div id="server-status" class="status-badge status-connecting" title="Backend App.java Server Status">
+        <span class="status-dot"></span>
+        <span class="status-text">Connecting Server...</span>
+      </div>
+      <button id="theme-toggle" class="btn-theme" title="Toggle Light/Dark Theme">
+        <span class="theme-icon">🌙</span>
+      </button>
+    </div>
+  </header>
+
+  <main class="app-container">
+    <aside class="sidebar-panel">
+      <nav class="sidebar-tabs">
+        <button class="tab-btn active" data-tab="tab-route">
+          <span class="tab-icon">🗺️</span>
+          <span>Route Planner</span>
+        </button>
+        <button class="tab-btn" data-tab="tab-directory">
+          <span class="tab-icon">🏢</span>
+          <span>Directory</span>
+        </button>
+        <button class="tab-btn tab-admin-btn" data-tab="tab-admin">
+          <span class="tab-icon">⚙️</span>
+          <span>Admin Portal</span>
+        </button>
+      </nav>
+
+      <!-- Tab 1: Route Planner -->
+      <section id="tab-route" class="tab-content active">
+        <div class="card route-card">
+          <h2 class="card-title">Plan Your Path</h2>
+          
+          <form id="route-form" class="route-form">
+            <div class="input-group">
+              <label for="start-location">
+                <span class="pin-indicator start-pin">A</span> Start Location
+              </label>
+              <select id="start-location" class="form-select" required>
+                <option value="" disabled selected>Select starting location...</option>
+              </select>
+            </div>
+
+            <div class="swap-row">
+              <button type="button" id="swap-locations" class="btn-swap" title="Swap Start & Destination">
+                🔄 Swap
+              </button>
+            </div>
+
+            <div class="input-group">
+              <label for="end-location">
+                <span class="pin-indicator end-pin">B</span> Destination
+              </label>
+              <select id="end-location" class="form-select" required>
+                <option value="" disabled selected>Select destination...</option>
+              </select>
+            </div>
+
+            <div class="checkbox-group">
+              <label class="custom-checkbox">
+                <input type="checkbox" id="accessible-only">
+                <span class="checkbox-box"></span>
+                <span class="checkbox-label">
+                  ♿ Accessible Route Only
+                  <small>Avoid stairs, prioritize ramps & elevators</small>
+                </span>
+              </label>
+            </div>
+
+            <button type="submit" id="btn-find-route" class="btn btn-primary btn-block">
+              <span>Find Shortest Route</span>
+              <span class="btn-arrow">→</span>
+            </button>
+          </form>
+        </div>
+
+        <div id="route-results" class="card route-results-card hidden">
+          <div class="results-header">
+            <div class="results-meta">
+              <span id="route-badge-accessible" class="badge badge-accessible hidden">♿ Accessible Route</span>
+              <h3 class="results-title">Directions Summary</h3>
+            </div>
+            <button id="btn-clear-route" class="btn-text-danger" title="Clear current route">Clear Route</button>
+          </div>
+
+          <div class="route-stats">
+            <div class="stat-box">
+              <span class="stat-icon">📏</span>
+              <div class="stat-data">
+                <span id="stat-distance" class="stat-value">0 m</span>
+                <span class="stat-label">Total Distance</span>
+              </div>
+            </div>
+            <div class="stat-box">
+              <span class="stat-icon">⏱️</span>
+              <div class="stat-data">
+                <span id="stat-time" class="stat-value">0 min</span>
+                <span class="stat-label">Est. Walk Time</span>
+              </div>
+            </div>
+          </div>
+
+          <div class="directions-list-container">
+            <h4>Turn-by-Turn Steps</h4>
+            <ol id="directions-list" class="directions-list">
+            </ol>
+          </div>
+        </div>
+      </section>
+
+      <!-- Tab 2: Directory -->
+      <section id="tab-directory" class="tab-content">
+        <div class="directory-filters">
+          <span class="filter-label">Filter Category:</span>
+          <div class="category-pills" id="category-pills">
+            <button class="pill-btn active" data-category="ALL">All</button>
+            <button class="pill-btn" data-category="Academic">Academic</button>
+            <button class="pill-btn" data-category="Library">Library</button>
+            <button class="pill-btn" data-category="Dining">Dining</button>
+            <button class="pill-btn" data-category="Student Center">Student Union</button>
+            <button class="pill-btn" data-category="Residence">Residence</button>
+            <button class="pill-btn" data-category="Sports">Sports</button>
+            <button class="pill-btn" data-category="Medical">Medical</button>
+            <button class="pill-btn" data-category="Admin">Admin</button>
+          </div>
+        </div>
+
+        <div id="directory-list" class="directory-grid">
+        </div>
+      </section>
+
+      <!-- Tab 3: Administrator Portal -->
+      <section id="tab-admin" class="tab-content">
+        <!-- Admin Access Gate -->
+        <div id="admin-auth-card" class="card admin-card">
+          <div class="admin-header-badge">🔒 Administrator Authentication</div>
+          <p class="admin-desc">Enter admin passcode to unlock campus node management tools.</p>
+          <div class="input-group">
+            <label for="admin-passcode">Admin Passcode</label>
+            <input type="password" id="admin-passcode" class="form-select" placeholder="Default: admin123">
+          </div>
+          <div class="admin-btn-row">
+            <button id="btn-admin-login" class="btn btn-primary btn-block">Unlock Portal</button>
+            <button id="btn-admin-bypass" class="btn btn-secondary btn-block">Quick Unlock</button>
+          </div>
+        </div>
+
+        <!-- Admin Portal Controls (Hidden by default until unlocked) -->
+        <div id="admin-dashboard" class="hidden">
+          <!-- Add New Location Node Form -->
+          <div class="card admin-card margin-bottom-lg">
+            <div class="admin-card-header">
+              <h3 class="card-title">➕ Add New Campus Location Node</h3>
+              <span class="badge badge-admin">Admin Action</span>
+            </div>
+
+            <form id="admin-add-node-form" class="route-form">
+              <div class="form-row-2">
+                <div class="input-group">
+                  <label for="admin-node-name">Building Name *</label>
+                  <input type="text" id="admin-node-name" class="form-select" placeholder="e.g. Robotics Center" required>
+                </div>
+                <div class="input-group">
+                  <label for="admin-node-code">Code (3-4 chars) *</label>
+                  <input type="text" id="admin-node-code" class="form-select" placeholder="e.g. ROB" maxlength="5" required>
+                </div>
+              </div>
+
+              <div class="form-row-2">
+                <div class="input-group">
+                  <label for="admin-node-category">Category *</label>
+                  <select id="admin-node-category" class="form-select" required>
+                    <option value="Academic">Academic</option>
+                    <option value="Library">Library</option>
+                    <option value="Dining">Dining</option>
+                    <option value="Student Center">Student Center</option>
+                    <option value="Residence">Residence</option>
+                    <option value="Sports">Sports</option>
+                    <option value="Medical">Medical</option>
+                    <option value="Admin">Admin</option>
+                    <option value="Arts">Arts</option>
+                  </select>
+                </div>
+                <div class="input-group">
+                  <label for="admin-node-icon">Icon Emoji *</label>
+                  <input type="text" id="admin-node-icon" class="form-select" value="🤖" required>
+                </div>
+              </div>
+
+              <!-- Map Coordinate Picker Button -->
+              <div class="coord-picker-box">
+                <button type="button" id="btn-pick-coords" class="btn btn-secondary btn-block">
+                  📍 Click Map to Pick Coordinates (X, Y)
+                </button>
+                <small id="coord-picker-status" class="coord-status-text">Click the button, then click anywhere on the campus map!</small>
+              </div>
+
+              <div class="form-row-2">
+                <div class="input-group">
+                  <label for="admin-node-x">X Coord (0 - 1000)</label>
+                  <input type="number" id="admin-node-x" class="form-select" min="20" max="980" value="500" required>
+                </div>
+                <div class="input-group">
+                  <label for="admin-node-y">Y Coord (0 - 800)</label>
+                  <input type="number" id="admin-node-y" class="form-select" min="20" max="780" value="400" required>
+                </div>
+              </div>
+
+              <div class="form-row-2">
+                <div class="input-group">
+                  <label for="admin-node-floors">Floors Count</label>
+                  <input type="number" id="admin-node-floors" class="form-select" min="1" max="15" value="3">
+                </div>
+                <div class="checkbox-group" style="align-self: flex-end; padding-bottom: 8px;">
+                  <label class="custom-checkbox">
+                    <input type="checkbox" id="admin-node-accessible" checked>
+                    <span class="checkbox-box"></span>
+                    <span class="checkbox-label">Wheelchair Accessible</span>
+                  </label>
+                </div>
+              </div>
+
+              <div class="input-group">
+                <label for="admin-node-desc">Building Description</label>
+                <textarea id="admin-node-desc" class="form-select" rows="2" placeholder="Brief summary of facility..."></textarea>
+              </div>
+
+              <button type="submit" id="btn-submit-node" class="btn btn-primary btn-block">
+                <span>Save New Location Node</span>
+                <span class="btn-arrow">✓</span>
+              </button>
+            </form>
+          </div>
+
+          <!-- Existing Nodes Management List -->
+          <div class="card admin-card">
+            <div class="admin-card-header">
+              <h3 class="card-title">🗑️ Existing Nodes Manager</h3>
+              <span id="admin-node-count-badge" class="badge badge-secondary">0 Nodes</span>
+            </div>
+
+            <div id="admin-nodes-list" class="admin-nodes-grid">
+              <!-- Dynamically populated with delete buttons -->
+            </div>
+          </div>
+        </div>
+      </section>
+    </aside>
+
+    <section class="map-viewport">
+      <div class="map-toolbar">
+        <div class="toolbar-group">
+          <button id="btn-zoom-in" class="toolbar-btn" title="Zoom In">+</button>
+          <button id="btn-zoom-out" class="toolbar-btn" title="Zoom Out">-</button>
+          <button id="btn-reset-view" class="toolbar-btn" title="Reset View">🎯</button>
+        </div>
+        <div class="toolbar-group">
+          <button id="btn-toggle-labels" class="toolbar-btn active" title="Toggle Labels">🏷️</button>
+          <button id="btn-toggle-paths" class="toolbar-btn active" title="Toggle Graph Network">🕸️</button>
+        </div>
+      </div>
+
+      <div class="map-legend">
+        <div class="legend-item"><span class="legend-color legend-walkway"></span> Walkway</div>
+        <div class="legend-item"><span class="legend-color legend-accessible"></span> Accessible Ramp</div>
+        <div class="legend-item"><span class="legend-color legend-stair"></span> Staircase</div>
+        <div class="legend-item"><span class="legend-color legend-active-path"></span> Active Route</div>
+      </div>
+
+      <div id="map-container" class="map-container">
+        <svg id="campus-svg" viewBox="0 0 1000 800" preserveAspectRatio="xMidYMid meet">
+          <defs>
+            <filter id="glow-route" x="-20%" y="-20%" width="140%" height="140%">
+              <feGaussianBlur stdDeviation="4" result="blur" />
+              <feComposite in="SourceGraphic" in2="blur" operator="over" />
+            </filter>
+            
+            <radialGradient id="node-gradient" cx="50%" cy="50%" r="50%">
+              <stop offset="0%" stop-color="#6366f1" />
+              <stop offset="100%" stop-color="#4f46e5" />
+            </radialGradient>
+          </defs>
+
+          <g id="layer-grounds">
+            <rect x="0" y="0" width="1000" height="800" fill="var(--map-bg)" />
+            <rect x="300" y="220" width="220" height="180" rx="20" fill="var(--map-grass)" />
+            <rect x="580" y="420" width="220" height="200" rx="20" fill="var(--map-grass)" />
+            <circle cx="200" cy="200" r="90" fill="var(--map-grass)" opacity="0.6" />
+          </g>
+
+          <g id="layer-edges"></g>
+          <g id="layer-active-route"></g>
+          <g id="layer-nodes"></g>
+          <g id="layer-labels"></g>
+          <!-- Layer 6: Admin Preview Node Pin -->
+          <g id="layer-admin-preview"></g>
+        </svg>
+      </div>
+    </section>
+  </main>
+
+  <div id="location-modal" class="modal-backdrop hidden">
+    <div class="modal-card">
+      <button id="modal-close" class="modal-close-btn">&times;</button>
+      <div class="modal-header">
+        <span id="modal-icon" class="modal-icon">🏢</span>
+        <div>
+          <h3 id="modal-title">Building Title</h3>
+          <span id="modal-category" class="modal-category-tag">Category</span>
+        </div>
+      </div>
+      <div class="modal-body">
+        <p id="modal-description">Building description goes here...</p>
+        <div class="modal-info-grid">
+          <div class="info-pill"><span class="pill-label">Building Code:</span> <strong id="modal-code">ENG</strong></div>
+          <div class="info-pill"><span class="pill-label">Floors:</span> <strong id="modal-floors">4</strong></div>
+          <div class="info-pill"><span class="pill-label">Wheelchair Access:</span> <strong id="modal-accessible">Yes</strong></div>
+        </div>
+        <div class="modal-amenities">
+          <h4>Key Amenities</h4>
+          <div id="modal-amenities-tags" class="amenities-tags"></div>
+        </div>
+      </div>
+      <div class="modal-actions">
+        <button id="btn-set-start" class="btn btn-secondary">Set as Start Location</button>
+        <button id="btn-set-destination" class="btn btn-primary">Navigate Here</button>
+      </div>
+    </div>
+  </div>
+
+  <script src="script.js" defer></script>
+</body>
+</html>

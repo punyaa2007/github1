@@ -1,0 +1,340 @@
+{
+  "campusInfo": {
+    "name": "Nova Horizon University Campus",
+    "mapDimensions": {
+      "width": 1000,
+      "height": 800
+    }
+  },
+  "locations": [
+    {
+      "id": "eng_building",
+      "name": "Engineering & Technology Complex",
+      "code": "ENG",
+      "category": "Academic",
+      "x": 220,
+      "y": 180,
+      "floors": 4,
+      "accessible": true,
+      "description": "Houses Computer Science, Electrical, and Mechanical Engineering departments with advanced robotics labs.",
+      "icon": "🛠️",
+      "amenities": ["Wi-Fi", "Computer Labs", "Elevator", "Study Lounges"]
+    },
+    {
+      "id": "science_hall",
+      "name": "Science & Research Center",
+      "code": "SCI",
+      "category": "Academic",
+      "x": 440,
+      "y": 150,
+      "floors": 3,
+      "accessible": true,
+      "description": "Chemistry, Physics, and Biotech research laboratories equipped with state-of-the-art instruments.",
+      "icon": "🔬",
+      "amenities": ["Wi-Fi", "Wet Labs", "Elevator", "Lecture Halls"]
+    },
+    {
+      "id": "main_library",
+      "name": "Central Campus Library",
+      "code": "LIB",
+      "category": "Library",
+      "x": 560,
+      "y": 320,
+      "floors": 5,
+      "accessible": true,
+      "description": "24/7 university library with quiet study spaces, media suites, and extensive digital archives.",
+      "icon": "📚",
+      "amenities": ["Wi-Fi", "Quiet Rooms", "Café", "Elevator", "Print Center"]
+    },
+    {
+      "id": "student_union",
+      "name": "Student Activity Union",
+      "code": "SAU",
+      "category": "Student Center",
+      "x": 380,
+      "y": 360,
+      "floors": 3,
+      "accessible": true,
+      "description": "Hub for student clubs, campus events, career placement center, and relaxation zones.",
+      "icon": "🏛️",
+      "amenities": ["Wi-Fi", "Event Hall", "ATM", "Information Desk"]
+    },
+    {
+      "id": "central_dining",
+      "name": "Campus Dining Commons",
+      "code": "DIN",
+      "category": "Dining",
+      "x": 220,
+      "y": 420,
+      "floors": 2,
+      "accessible": true,
+      "description": "Main dining hall serving organic meals, international cuisine, coffee, and fresh bakery.",
+      "icon": "🍴",
+      "amenities": ["Vegan Options", "Outdoor Seating", "Accessible Restrooms"]
+    },
+    {
+      "id": "sports_arena",
+      "name": "Athletics & Recreation Arena",
+      "code": "SPT",
+      "category": "Sports",
+      "x": 200,
+      "y": 660,
+      "floors": 2,
+      "accessible": true,
+      "description": "Olympic-size pool, indoor basketball courts, gym facility, and athletics office.",
+      "icon": "⚽",
+      "amenities": ["Lockers", "Showers", "Gym Equipment", "Elevator"]
+    },
+    {
+      "id": "admin_building",
+      "name": "University Administration",
+      "code": "ADM",
+      "category": "Admin",
+      "x": 720,
+      "y": 180,
+      "floors": 3,
+      "accessible": true,
+      "description": "Office of Admissions, Registrar, Financial Aid, and Executive Administration.",
+      "icon": "🏢",
+      "amenities": ["Wi-Fi", "Registrar Desk", "Elevator", "Visitor Lounge"]
+    },
+    {
+      "id": "dorm_north",
+      "name": "North Quad Residences",
+      "code": "NQR",
+      "category": "Residence",
+      "x": 680,
+      "y": 480,
+      "floors": 6,
+      "accessible": true,
+      "description": "Modern student residence halls with community kitchens, laundry, and courtyard.",
+      "icon": "🏠",
+      "amenities": ["Laundry", "Kitchen", "Study Rooms", "Security Desk"]
+    },
+    {
+      "id": "dorm_south",
+      "name": "South Quad Residences",
+      "code": "SQR",
+      "category": "Residence",
+      "x": 460,
+      "y": 680,
+      "floors": 5,
+      "accessible": true,
+      "description": "Residence halls adjacent to sports fields and dining facilities.",
+      "icon": "🏠",
+      "amenities": ["Laundry", "Game Room", "Elevator"]
+    },
+    {
+      "id": "innovation_hub",
+      "name": "Tech & Entrepreneurship Hub",
+      "code": "HUB",
+      "category": "Academic",
+      "x": 840,
+      "y": 350,
+      "floors": 4,
+      "accessible": true,
+      "description": "Incubator space for student startups, 3D printing labs, and maker spaces.",
+      "icon": "💡",
+      "amenities": ["3D Printers", "Co-working Space", "High-speed Fiber"]
+    },
+    {
+      "id": "health_center",
+      "name": "Campus Health & Wellness Center",
+      "code": "HLC",
+      "category": "Medical",
+      "x": 780,
+      "y": 640,
+      "floors": 2,
+      "accessible": true,
+      "description": "Full-service health clinic providing medical care, counseling, and pharmacy services.",
+      "icon": "🏥",
+      "amenities": ["Pharmacy", "Urgent Care", "Wheelchair Access", "Counseling"]
+    },
+    {
+      "id": "arts_center",
+      "name": "Performing Arts Center",
+      "code": "PAC",
+      "category": "Arts",
+      "x": 380,
+      "y": 540,
+      "floors": 3,
+      "accessible": true,
+      "description": "700-seat auditorium, music practice rooms, and fine arts gallery.",
+      "icon": "🎭",
+      "amenities": ["Auditorium", "Gallery", "Elevator", "Acoustic Rooms"]
+    }
+  ],
+  "routes": [
+    {
+      "id": "r1",
+      "from": "eng_building",
+      "to": "science_hall",
+      "distance": 220,
+      "time": 3,
+      "type": "Paved Walkway",
+      "accessible": true
+    },
+    {
+      "id": "r2",
+      "from": "eng_building",
+      "to": "central_dining",
+      "distance": 240,
+      "time": 3,
+      "type": "Paved Walkway",
+      "accessible": true
+    },
+    {
+      "id": "r3",
+      "from": "eng_building",
+      "to": "student_union",
+      "distance": 250,
+      "time": 4,
+      "type": "Paved Walkway",
+      "accessible": true
+    },
+    {
+      "id": "r4",
+      "from": "science_hall",
+      "to": "admin_building",
+      "distance": 290,
+      "time": 4,
+      "type": "Tree-lined Path",
+      "accessible": true
+    },
+    {
+      "id": "r5",
+      "from": "science_hall",
+      "to": "main_library",
+      "distance": 210,
+      "time": 3,
+      "type": "Paved Walkway",
+      "accessible": true
+    },
+    {
+      "id": "r6",
+      "from": "admin_building",
+      "to": "innovation_hub",
+      "distance": 200,
+      "time": 3,
+      "type": "Modern Plaza Path",
+      "accessible": true
+    },
+    {
+      "id": "r7",
+      "from": "main_library",
+      "to": "student_union",
+      "distance": 180,
+      "time": 2,
+      "type": "Central Quad Walkway",
+      "accessible": true
+    },
+    {
+      "id": "r8",
+      "from": "main_library",
+      "to": "dorm_north",
+      "distance": 200,
+      "time": 3,
+      "type": "Shaded Path",
+      "accessible": true
+    },
+    {
+      "id": "r9",
+      "from": "main_library",
+      "to": "innovation_hub",
+      "distance": 280,
+      "time": 4,
+      "type": "Paved Walkway",
+      "accessible": true
+    },
+    {
+      "id": "r10",
+      "from": "student_union",
+      "to": "central_dining",
+      "distance": 170,
+      "time": 2,
+      "type": "Courtyard Walk",
+      "accessible": true
+    },
+    {
+      "id": "r11",
+      "from": "student_union",
+      "to": "arts_center",
+      "distance": 180,
+      "time": 3,
+      "type": "Paved Walkway",
+      "accessible": true
+    },
+    {
+      "id": "r12",
+      "from": "central_dining",
+      "to": "sports_arena",
+      "distance": 240,
+      "time": 3,
+      "type": "Outdoor Staircase Shortcut",
+      "accessible": false
+    },
+    {
+      "id": "r13",
+      "from": "central_dining",
+      "to": "arts_center",
+      "distance": 200,
+      "time": 3,
+      "type": "Accessible Slope Path",
+      "accessible": true
+    },
+    {
+      "id": "r14",
+      "from": "arts_center",
+      "to": "dorm_south",
+      "distance": 160,
+      "time": 2,
+      "type": "Paved Walkway",
+      "accessible": true
+    },
+    {
+      "id": "r15",
+      "from": "dorm_south",
+      "to": "sports_arena",
+      "distance": 260,
+      "time": 4,
+      "type": "Wheelchair Ramp & Walk",
+      "accessible": true
+    },
+    {
+      "id": "r16",
+      "from": "dorm_north",
+      "to": "health_center",
+      "distance": 190,
+      "time": 3,
+      "type": "Paved Walkway",
+      "accessible": true
+    },
+    {
+      "id": "r17",
+      "from": "innovation_hub",
+      "to": "health_center",
+      "distance": 310,
+      "time": 4,
+      "type": "East Quad Walkway",
+      "accessible": true
+    },
+    {
+      "id": "r18",
+      "from": "dorm_north",
+      "to": "dorm_south",
+      "distance": 300,
+      "time": 4,
+      "type": "Central Corridor Path",
+      "accessible": true
+    },
+    {
+      "id": "r19",
+      "from": "arts_center",
+      "to": "main_library",
+      "distance": 230,
+      "time": 3,
+      "type": "Plaza Walkway",
+      "accessible": true
+    }
+  ]
+}
