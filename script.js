@@ -1,6 +1,6 @@
 /**
  * Campus Navigation System - Interactive Client Controller & Admin Portal
- * Features real-time route pathfinding, accessibility routing, and Admin Node Management.
+ * Features real-time route pathfinding, accessibility routing, and Secure Admin Portal.
  */
 
 // Embedded Campus Dataset (guarantees instant loading even on file:// protocol without local webserver)
@@ -203,6 +203,7 @@ let dragStart = { x: 0, y: 0 };
 // Admin Portal State
 let isAdminUnlocked = false;
 let isPickingCoords = false;
+let authenticatedAdminEmail = 'admin@campus.edu';
 
 // DOM Elements Cache
 const elements = {
@@ -249,10 +250,14 @@ const elements = {
 
   // Admin Elements
   adminAuthCard: document.getElementById('admin-auth-card'),
+  adminLoginForm: document.getElementById('admin-login-form'),
   adminDashboard: document.getElementById('admin-dashboard'),
-  adminPasscode: document.getElementById('admin-passcode'),
+  adminEmail: document.getElementById('admin-email'),
+  adminPassword: document.getElementById('admin-password'),
+  adminAuthError: document.getElementById('admin-auth-error'),
+  adminProfileEmail: document.getElementById('admin-profile-email'),
   btnAdminLogin: document.getElementById('btn-admin-login'),
-  btnAdminBypass: document.getElementById('btn-admin-bypass'),
+  btnAdminLogout: document.getElementById('btn-admin-logout'),
   adminAddNodeForm: document.getElementById('admin-add-node-form'),
   btnPickCoords: document.getElementById('btn-pick-coords'),
   coordPickerStatus: document.getElementById('coord-picker-status'),
@@ -275,6 +280,7 @@ document.addEventListener('DOMContentLoaded', async () => {
   
   await checkServerStatus();
   await loadCampusData();
+  await checkAdminSession();
 
   setInterval(checkServerStatus, 10000);
 });
@@ -812,8 +818,8 @@ function setupMapPanZoom() {
 
     isPickingCoords = false;
     elements.campusSvg.classList.remove('picking-coords');
-    elements.btnPickCoords.classList.remove('btn-primary');
-    elements.btnPickCoords.classList.add('btn-secondary');
+    elements.btnPickCoords.classList.remove('btn-secondary');
+    elements.btnPickCoords.classList.add('btn-primary');
     elements.coordPickerStatus.textContent = `Picked coordinates: X=${clickX}, Y=${clickY}`;
   });
 }
@@ -858,22 +864,23 @@ function setupEventListeners() {
 }
 
 // ==========================================================================
-// 6. Administrator Portal Handlers & Methods
+// 6. Administrator Security, Authentication & Session Handlers
 // ==========================================================================
 function setupAdminListeners() {
-  // Login Unlock
-  elements.btnAdminLogin.addEventListener('click', () => {
-    const code = elements.adminPasscode.value.trim();
-    if (code === 'admin123' || code === '') {
-      unlockAdminDashboard();
-    } else {
-      alert('Invalid passcode. Default passcode is: admin123');
-    }
-  });
+  // Login Form Submission
+  if (elements.adminLoginForm) {
+    elements.adminLoginForm.addEventListener('submit', async (e) => {
+      e.preventDefault();
+      await handleAdminLogin();
+    });
+  }
 
-  elements.btnAdminBypass.addEventListener('click', () => {
-    unlockAdminDashboard();
-  });
+  // Logout Click
+  if (elements.btnAdminLogout) {
+    elements.btnAdminLogout.addEventListener('click', async () => {
+      await handleAdminLogout();
+    });
+  }
 
   // Pick Coordinates mode
   elements.btnPickCoords.addEventListener('click', () => {
@@ -907,11 +914,113 @@ function setupAdminListeners() {
   });
 }
 
+async function checkAdminSession() {
+  if (!isServerOnline) return;
+
+  try {
+    const res = await fetch(`${API_BASE_URL}/admin/session`, {
+      method: 'GET',
+      credentials: 'include'
+    });
+    if (res.ok) {
+      const data = await res.json();
+      if (data.authenticated) {
+        authenticatedAdminEmail = data.email || 'admin@campus.edu';
+        unlockAdminDashboard();
+      } else {
+        lockAdminDashboard();
+      }
+    } else {
+      lockAdminDashboard();
+    }
+  } catch (err) {
+    lockAdminDashboard();
+  }
+}
+
+async function handleAdminLogin() {
+  const email = elements.adminEmail.value.trim();
+  const password = elements.adminPassword.value.trim();
+
+  hideAuthError();
+
+  if (!email || !password) {
+    showAuthError('Please enter both admin email address and password.');
+    return;
+  }
+
+  // Simple email format check
+  const emailPattern = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+  if (!emailPattern.test(email)) {
+    showAuthError('Please enter a valid email address (e.g. admin@campus.edu).');
+    return;
+  }
+
+  if (isServerOnline) {
+    try {
+      const res = await fetch(`${API_BASE_URL}/admin/login`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        credentials: 'include',
+        body: JSON.stringify({ email, password })
+      });
+
+      const data = await res.json();
+
+      if (res.ok && data.success) {
+        authenticatedAdminEmail = data.email || email;
+        elements.adminPassword.value = '';
+        unlockAdminDashboard();
+      } else {
+        showAuthError(data.error || 'Authentication failed. Please check your credentials.');
+      }
+    } catch (err) {
+      showAuthError('Network error connecting to authentication server.');
+    }
+  } else {
+    // Client-side fallback mode prompt
+    showAuthError('Server is currently offline. Administrator authentication requires active backend server.');
+  }
+}
+
+async function handleAdminLogout() {
+  if (isServerOnline) {
+    try {
+      await fetch(`${API_BASE_URL}/admin/logout`, {
+        method: 'POST',
+        credentials: 'include'
+      });
+    } catch (err) {}
+  }
+  lockAdminDashboard();
+}
+
 function unlockAdminDashboard() {
   isAdminUnlocked = true;
+  if (elements.adminProfileEmail) {
+    elements.adminProfileEmail.textContent = authenticatedAdminEmail;
+  }
   elements.adminAuthCard.classList.add('hidden');
   elements.adminDashboard.classList.remove('hidden');
   renderAdminNodesList();
+}
+
+function lockAdminDashboard() {
+  isAdminUnlocked = false;
+  elements.adminAuthCard.classList.remove('hidden');
+  elements.adminDashboard.classList.add('hidden');
+}
+
+function showAuthError(msg) {
+  if (!elements.adminAuthError) return;
+  elements.adminAuthError.textContent = `⚠️ ${msg}`;
+  elements.adminAuthError.classList.remove('hidden');
+}
+
+function hideAuthError() {
+  if (!elements.adminAuthError) return;
+  elements.adminAuthError.classList.add('hidden');
+  elements.adminAuthError.textContent = '';
 }
 
 function renderAdminNodesList() {
@@ -935,14 +1044,27 @@ function renderAdminNodesList() {
 }
 
 async function addLocationNode(newNode) {
+  if (!isAdminUnlocked) {
+    alert('Unauthorized: You must be logged in as an administrator.');
+    lockAdminDashboard();
+    return;
+  }
+
   // 1. Post to Server API if online
   if (isServerOnline) {
     try {
-      await fetch(`${API_BASE_URL}/admin/node/add`, {
+      const res = await fetch(`${API_BASE_URL}/admin/node/add`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
+        credentials: 'include',
         body: JSON.stringify(newNode)
       });
+
+      if (res.status === 401) {
+        alert('Admin session expired. Please sign in again.');
+        lockAdminDashboard();
+        return;
+      }
     } catch (err) {
       console.warn('API add node failed:', err);
     }
@@ -987,6 +1109,12 @@ async function addLocationNode(newNode) {
 }
 
 async function deleteLocationNode(id) {
+  if (!isAdminUnlocked) {
+    alert('Unauthorized: You must be logged in as an administrator.');
+    lockAdminDashboard();
+    return;
+  }
+
   const loc = locationMap.get(id);
   const confirmMsg = loc ? `Are you sure you want to delete '${loc.name}'?` : 'Delete node?';
   if (!confirm(confirmMsg)) return;
@@ -994,11 +1122,18 @@ async function deleteLocationNode(id) {
   // 1. Post to Server API if online
   if (isServerOnline) {
     try {
-      await fetch(`${API_BASE_URL}/admin/node/delete`, {
+      const res = await fetch(`${API_BASE_URL}/admin/node/delete`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
+        credentials: 'include',
         body: JSON.stringify({ id })
       });
+
+      if (res.status === 401) {
+        alert('Admin session expired. Please sign in again.');
+        lockAdminDashboard();
+        return;
+      }
     } catch (err) {
       console.warn('API delete node failed:', err);
     }

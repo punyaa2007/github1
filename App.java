@@ -2,21 +2,49 @@ import com.sun.net.httpserver.HttpExchange;
 import com.sun.net.httpserver.HttpHandler;
 import com.sun.net.httpserver.HttpServer;
 
+import javax.crypto.SecretKeyFactory;
+import javax.crypto.spec.PBEKeySpec;
 import java.io.*;
 import java.net.InetSocketAddress;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Paths;
+import java.security.SecureRandom;
+import java.security.spec.KeySpec;
 import java.util.*;
+import java.util.concurrent.ConcurrentHashMap;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 
 public class App {
     private static final int PORT = 8080;
     private static String rawJsonData = "";
-    private static List<Location> locations = new ArrayList<>();
-    private static List<Route> routes = new ArrayList<>();
-    private static Map<String, Location> locationMap = new HashMap<>();
+    private static final List<Location> locations = Collections.synchronizedList(new ArrayList<>());
+    private static final List<Route> routes = Collections.synchronizedList(new ArrayList<>());
+    private static final Map<String, Location> locationMap = new ConcurrentHashMap<>();
+
+    // Admin Security & Session Store
+    private static final String CREDENTIALS_FILE = "admin_credentials.json";
+    private static final Map<String, AdminSession> activeSessions = new ConcurrentHashMap<>();
+    private static String storedAdminEmail = "admin@campus.edu";
+    private static String storedPasswordHash = "";
+    private static String storedSaltHex = "";
+
+    static class AdminSession {
+        final String sessionId;
+        final String email;
+        final long expiryTimestamp;
+
+        AdminSession(String sessionId, String email, long durationMillis) {
+            this.sessionId = sessionId;
+            this.email = email;
+            this.expiryTimestamp = System.currentTimeMillis() + durationMillis;
+        }
+
+        boolean isExpired() {
+            return System.currentTimeMillis() > expiryTimestamp;
+        }
+    }
 
     static class Location {
         String id;
@@ -66,6 +94,7 @@ public class App {
 
     public static void main(String[] args) throws IOException {
         loadData();
+        initAdminSecurity();
 
         HttpServer server = HttpServer.create(new InetSocketAddress(PORT), 0);
 
@@ -73,6 +102,11 @@ public class App {
         server.createContext("/api/locations", new CorsHandler(new LocationsHandler()));
         server.createContext("/api/navigate", new CorsHandler(new NavigateHandler()));
         server.createContext("/api/health", new CorsHandler(new HealthHandler()));
+        
+        // Admin Auth & Protected Endpoints
+        server.createContext("/api/admin/login", new CorsHandler(new AdminLoginHandler()));
+        server.createContext("/api/admin/logout", new CorsHandler(new AdminLogoutHandler()));
+        server.createContext("/api/admin/session", new CorsHandler(new AdminSessionHandler()));
         server.createContext("/api/admin/node/add", new CorsHandler(new AddNodeHandler()));
         server.createContext("/api/admin/node/delete", new CorsHandler(new DeleteNodeHandler()));
 
@@ -81,10 +115,140 @@ public class App {
         System.out.println("=================================================");
         System.out.println("Campus Navigation Server running on port " + PORT);
         System.out.println("API Data: http://localhost:" + PORT + "/api/data");
-        System.out.println("API Route: http://localhost:" + PORT + "/api/navigate?from=eng_building&to=sports_arena");
+        System.out.println("Admin Account Email: " + storedAdminEmail);
         System.out.println("=================================================");
     }
 
+    // =========================================================================
+    // Security & Password Hashing Methods (PBKDF2)
+    // =========================================================================
+    private static void initAdminSecurity() {
+        try {
+            if (Files.exists(Paths.get(CREDENTIALS_FILE))) {
+                String content = new String(Files.readAllBytes(Paths.get(CREDENTIALS_FILE)), StandardCharsets.UTF_8);
+                Map<String, String> creds = parseJsonBody(content);
+                storedAdminEmail = creds.getOrDefault("email", "admin@campus.edu");
+                storedPasswordHash = creds.getOrDefault("hash", "");
+                storedSaltHex = creds.getOrDefault("salt", "");
+                System.out.println("Loaded secure admin credentials from " + CREDENTIALS_FILE);
+            } else {
+                System.out.println("Initializing default admin credentials (admin@campus.edu)...");
+                byte[] salt = generateSalt();
+                storedAdminEmail = "admin@campus.edu";
+                storedSaltHex = bytesToHex(salt);
+                storedPasswordHash = hashPassword("AdminPassword123!", salt);
+                saveAdminCredentialsToDisk();
+            }
+        } catch (Exception e) {
+            System.err.println("Error initializing admin security: " + e.getMessage());
+        }
+    }
+
+    private static void saveAdminCredentialsToDisk() {
+        try {
+            String json = String.format("{\n  \"email\": \"%s\",\n  \"hash\": \"%s\",\n  \"salt\": \"%s\"\n}\n",
+                    escapeJson(storedAdminEmail), storedPasswordHash, storedSaltHex);
+            Files.write(Paths.get(CREDENTIALS_FILE), json.getBytes(StandardCharsets.UTF_8));
+            System.out.println("Saved admin credentials to " + CREDENTIALS_FILE);
+        } catch (Exception e) {
+            System.err.println("Failed to write credentials file: " + e.getMessage());
+        }
+    }
+
+    private static byte[] generateSalt() {
+        SecureRandom random = new SecureRandom();
+        byte[] salt = new byte[16];
+        random.nextBytes(salt);
+        return salt;
+    }
+
+    private static String hashPassword(String password, byte[] salt) {
+        try {
+            KeySpec spec = new PBEKeySpec(password.toCharArray(), salt, 65536, 256);
+            SecretKeyFactory factory = SecretKeyFactory.getInstance("PBKDF2WithHmacSHA256");
+            byte[] hash = factory.generateSecret(spec).getEncoded();
+            return bytesToHex(hash);
+        } catch (Exception e) {
+            throw new RuntimeException("Error hashing password with PBKDF2: " + e.getMessage(), e);
+        }
+    }
+
+    private static boolean verifyAdminPassword(String email, String rawPassword) {
+        if (email == null || rawPassword == null) return false;
+        if (!email.trim().equalsIgnoreCase(storedAdminEmail.trim())) return false;
+        try {
+            byte[] salt = hexToBytes(storedSaltHex);
+            String computedHash = hashPassword(rawPassword, salt);
+            return computedHash.equalsIgnoreCase(storedPasswordHash);
+        } catch (Exception e) {
+            System.err.println("Verify password error: " + e.getMessage());
+            return false;
+        }
+    }
+
+    private static String bytesToHex(byte[] bytes) {
+        StringBuilder sb = new StringBuilder();
+        for (byte b : bytes) {
+            sb.append(String.format("%02x", b));
+        }
+        return sb.toString();
+    }
+
+    private static byte[] hexToBytes(String hex) {
+        int len = hex.length();
+        byte[] data = new byte[len / 2];
+        for (int i = 0; i < len; i += 2) {
+            data[i / 2] = (byte) ((Character.digit(hex.charAt(i), 16) << 4)
+                    + Character.digit(hex.charAt(i + 1), 16));
+        }
+        return data;
+    }
+
+    // =========================================================================
+    // Session & Cookie Helper Methods
+    // =========================================================================
+    private static AdminSession validateSession(HttpExchange exchange) {
+        String sessionId = getSessionIdFromCookie(exchange);
+        if (sessionId == null || sessionId.isEmpty()) return null;
+
+        AdminSession session = activeSessions.get(sessionId);
+        if (session == null) return null;
+        if (session.isExpired()) {
+            activeSessions.remove(sessionId);
+            return null;
+        }
+        return session;
+    }
+
+    private static String getSessionIdFromCookie(HttpExchange exchange) {
+        List<String> cookieHeaders = exchange.getRequestHeaders().get("Cookie");
+        if (cookieHeaders != null) {
+            for (String header : cookieHeaders) {
+                String[] cookies = header.split(";");
+                for (String cookie : cookies) {
+                    String[] pair = cookie.trim().split("=", 2);
+                    if (pair.length == 2 && "session_id".equalsIgnoreCase(pair[0].trim())) {
+                        return pair[1].trim();
+                    }
+                }
+            }
+        }
+        return null;
+    }
+
+    private static void setSessionCookie(HttpExchange exchange, String sessionId) {
+        String cookieValue = String.format("session_id=%s; Path=/; HttpOnly; SameSite=Lax", sessionId);
+        exchange.getResponseHeaders().add("Set-Cookie", cookieValue);
+    }
+
+    private static void clearSessionCookie(HttpExchange exchange) {
+        String cookieValue = "session_id=; Path=/; Expires=Thu, 01 Jan 1970 00:00:00 GMT; HttpOnly; SameSite=Lax";
+        exchange.getResponseHeaders().add("Set-Cookie", cookieValue);
+    }
+
+    // =========================================================================
+    // Data Management
+    // =========================================================================
     private static void loadData() {
         String dataPath = "data.json";
         try {
@@ -169,6 +333,9 @@ public class App {
         }
     }
 
+    // =========================================================================
+    // HTTP Handlers & Middlewares
+    // =========================================================================
     static class CorsHandler implements HttpHandler {
         private final HttpHandler next;
 
@@ -178,9 +345,13 @@ public class App {
 
         @Override
         public void handle(HttpExchange exchange) throws IOException {
-            exchange.getResponseHeaders().add("Access-Control-Allow-Origin", "*");
-            exchange.getResponseHeaders().add("Access-Control-Allow-Methods", "GET, POST, OPTIONS");
-            exchange.getResponseHeaders().add("Access-Control-Allow-Headers", "Content-Type, Authorization");
+            List<String> origins = exchange.getRequestHeaders().get("Origin");
+            String origin = (origins != null && !origins.isEmpty()) ? origins.get(0) : "*";
+
+            exchange.getResponseHeaders().set("Access-Control-Allow-Origin", origin);
+            exchange.getResponseHeaders().set("Access-Control-Allow-Credentials", "true");
+            exchange.getResponseHeaders().set("Access-Control-Allow-Methods", "GET, POST, OPTIONS");
+            exchange.getResponseHeaders().set("Access-Control-Allow-Headers", "Content-Type, Authorization, Cookie");
 
             if ("OPTIONS".equalsIgnoreCase(exchange.getRequestMethod())) {
                 exchange.sendResponseHeaders(204, -1);
@@ -226,7 +397,7 @@ public class App {
     static class HealthHandler implements HttpHandler {
         @Override
         public void handle(HttpExchange exchange) throws IOException {
-            String json = "{\"status\":\"OK\",\"server\":\"Campus Navigation App.java\",\"version\":\"1.1.0 (Admin Enabled)\"}";
+            String json = "{\"status\":\"OK\",\"server\":\"Campus Navigation App.java\",\"version\":\"2.0.0 (Secure PBKDF2 Auth Enabled)\"}";
             byte[] response = json.getBytes(StandardCharsets.UTF_8);
             exchange.getResponseHeaders().add("Content-Type", "application/json; charset=UTF-8");
             exchange.sendResponseHeaders(200, response.length);
@@ -236,11 +407,92 @@ public class App {
         }
     }
 
+    // =========================================================================
+    // Admin Auth Handlers
+    // =========================================================================
+    static class AdminLoginHandler implements HttpHandler {
+        @Override
+        public void handle(HttpExchange exchange) throws IOException {
+            if (!"POST".equalsIgnoreCase(exchange.getRequestMethod())) {
+                sendJsonResponse(exchange, 405, "{\"success\":false,\"error\":\"Method Not Allowed\"}");
+                return;
+            }
+
+            String body = readStream(exchange.getRequestBody());
+            Map<String, String> params = parseJsonBody(body);
+            String email = params.get("email");
+            String password = params.get("password");
+
+            if (email == null || email.trim().isEmpty() || password == null || password.trim().isEmpty()) {
+                sendJsonResponse(exchange, 400, "{\"success\":false,\"error\":\"Email and password are required.\"}");
+                return;
+            }
+
+            if (verifyAdminPassword(email, password)) {
+                String sessionId = UUID.randomUUID().toString();
+                // 24 hours session duration
+                AdminSession session = new AdminSession(sessionId, email.trim().toLowerCase(), 86400000L);
+                activeSessions.put(sessionId, session);
+
+                setSessionCookie(exchange, sessionId);
+                System.out.println("Admin login successful for: " + email);
+                sendJsonResponse(exchange, 200, String.format("{\"success\":true,\"message\":\"Login successful\",\"email\":\"%s\"}", escapeJson(email)));
+            } else {
+                System.err.println("Admin login failed for email: " + email);
+                sendJsonResponse(exchange, 401, "{\"success\":false,\"error\":\"Invalid email or password.\"}");
+            }
+        }
+    }
+
+    static class AdminLogoutHandler implements HttpHandler {
+        @Override
+        public void handle(HttpExchange exchange) throws IOException {
+            if (!"POST".equalsIgnoreCase(exchange.getRequestMethod())) {
+                sendJsonResponse(exchange, 405, "{\"success\":false,\"error\":\"Method Not Allowed\"}");
+                return;
+            }
+
+            String sessionId = getSessionIdFromCookie(exchange);
+            if (sessionId != null) {
+                activeSessions.remove(sessionId);
+            }
+            clearSessionCookie(exchange);
+            sendJsonResponse(exchange, 200, "{\"success\":true,\"message\":\"Logged out successfully.\"}");
+        }
+    }
+
+    static class AdminSessionHandler implements HttpHandler {
+        @Override
+        public void handle(HttpExchange exchange) throws IOException {
+            if (!"GET".equalsIgnoreCase(exchange.getRequestMethod())) {
+                sendJsonResponse(exchange, 405, "{\"success\":false,\"error\":\"Method Not Allowed\"}");
+                return;
+            }
+
+            AdminSession session = validateSession(exchange);
+            if (session != null) {
+                sendJsonResponse(exchange, 200, String.format("{\"authenticated\":true,\"email\":\"%s\"}", escapeJson(session.email)));
+            } else {
+                sendJsonResponse(exchange, 401, "{\"authenticated\":false,\"error\":\"No active admin session\"}");
+            }
+        }
+    }
+
+    // =========================================================================
+    // Admin Protected Endpoints
+    // =========================================================================
     static class AddNodeHandler implements HttpHandler {
         @Override
         public void handle(HttpExchange exchange) throws IOException {
             if (!"POST".equalsIgnoreCase(exchange.getRequestMethod())) {
-                exchange.sendResponseHeaders(450, -1);
+                sendJsonResponse(exchange, 405, "{\"success\":false,\"error\":\"Method Not Allowed\"}");
+                return;
+            }
+
+            // Require Session Verification
+            AdminSession session = validateSession(exchange);
+            if (session == null) {
+                sendJsonResponse(exchange, 401, "{\"success\":false,\"error\":\"Unauthorized. Active admin session required.\"}");
                 return;
             }
 
@@ -265,12 +517,7 @@ public class App {
             saveDataToDisk();
 
             String jsonResponse = String.format("{\"success\":true,\"message\":\"Node added successfully\",\"nodeId\":\"%s\"}", id);
-            byte[] response = jsonResponse.getBytes(StandardCharsets.UTF_8);
-            exchange.getResponseHeaders().add("Content-Type", "application/json; charset=UTF-8");
-            exchange.sendResponseHeaders(200, response.length);
-            try (OutputStream os = exchange.getResponseBody()) {
-                os.write(response);
-            }
+            sendJsonResponse(exchange, 200, jsonResponse);
         }
     }
 
@@ -278,7 +525,14 @@ public class App {
         @Override
         public void handle(HttpExchange exchange) throws IOException {
             if (!"POST".equalsIgnoreCase(exchange.getRequestMethod())) {
-                exchange.sendResponseHeaders(450, -1);
+                sendJsonResponse(exchange, 405, "{\"success\":false,\"error\":\"Method Not Allowed\"}");
+                return;
+            }
+
+            // Require Session Verification
+            AdminSession session = validateSession(exchange);
+            if (session == null) {
+                sendJsonResponse(exchange, 401, "{\"success\":false,\"error\":\"Unauthorized. Active admin session required.\"}");
                 return;
             }
 
@@ -287,13 +541,7 @@ public class App {
             String id = params.get("id");
 
             if (id == null || !locationMap.containsKey(id)) {
-                String errJson = "{\"success\":false,\"error\":\"Node ID not found.\"}";
-                byte[] response = errJson.getBytes(StandardCharsets.UTF_8);
-                exchange.getResponseHeaders().add("Content-Type", "application/json; charset=UTF-8");
-                exchange.sendResponseHeaders(400, response.length);
-                try (OutputStream os = exchange.getResponseBody()) {
-                    os.write(response);
-                }
+                sendJsonResponse(exchange, 400, "{\"success\":false,\"error\":\"Node ID not found.\"}");
                 return;
             }
 
@@ -307,15 +555,13 @@ public class App {
             saveDataToDisk();
 
             String jsonResponse = String.format("{\"success\":true,\"message\":\"Node '%s' and connected routes deleted successfully\"}", id);
-            byte[] response = jsonResponse.getBytes(StandardCharsets.UTF_8);
-            exchange.getResponseHeaders().add("Content-Type", "application/json; charset=UTF-8");
-            exchange.sendResponseHeaders(200, response.length);
-            try (OutputStream os = exchange.getResponseBody()) {
-                os.write(response);
-            }
+            sendJsonResponse(exchange, 200, jsonResponse);
         }
     }
 
+    // =========================================================================
+    // Route Calculation (Dijkstra)
+    // =========================================================================
     static class NavigateHandler implements HttpHandler {
         @Override
         public void handle(HttpExchange exchange) throws IOException {
@@ -325,13 +571,7 @@ public class App {
             boolean accessibleOnly = Boolean.parseBoolean(params.getOrDefault("accessible", "false"));
 
             if (from == null || to == null || !locationMap.containsKey(from) || !locationMap.containsKey(to)) {
-                String errorJson = "{\"success\":false,\"error\":\"Invalid 'from' or 'to' parameters. Locations must exist.\"}";
-                byte[] response = errorJson.getBytes(StandardCharsets.UTF_8);
-                exchange.getResponseHeaders().add("Content-Type", "application/json; charset=UTF-8");
-                exchange.sendResponseHeaders(400, response.length);
-                try (OutputStream os = exchange.getResponseBody()) {
-                    os.write(response);
-                }
+                sendJsonResponse(exchange, 400, "{\"success\":false,\"error\":\"Invalid 'from' or 'to' parameters. Locations must exist.\"}");
                 return;
             }
 
@@ -372,13 +612,7 @@ public class App {
             }
 
             if (dist.get(to) == Integer.MAX_VALUE) {
-                String errorJson = "{\"success\":false,\"error\":\"No path found matching criteria.\"}";
-                byte[] response = errorJson.getBytes(StandardCharsets.UTF_8);
-                exchange.getResponseHeaders().add("Content-Type", "application/json; charset=UTF-8");
-                exchange.sendResponseHeaders(404, response.length);
-                try (OutputStream os = exchange.getResponseBody()) {
-                    os.write(response);
-                }
+                sendJsonResponse(exchange, 404, "{\"success\":false,\"error\":\"No path found matching criteria.\"}");
                 return;
             }
 
@@ -425,12 +659,7 @@ public class App {
                     from, to, accessibleOnly, totalDist, totalTime, nodePathJson.toString(), directionsJson.toString()
             );
 
-            byte[] response = jsonResponse.getBytes(StandardCharsets.UTF_8);
-            exchange.getResponseHeaders().add("Content-Type", "application/json; charset=UTF-8");
-            exchange.sendResponseHeaders(200, response.length);
-            try (OutputStream os = exchange.getResponseBody()) {
-                os.write(response);
-            }
+            sendJsonResponse(exchange, 200, jsonResponse);
         }
     }
 
@@ -441,6 +670,18 @@ public class App {
         NodeDistance(String nodeId, int distance) {
             this.nodeId = nodeId;
             this.distance = distance;
+        }
+    }
+
+    // =========================================================================
+    // Utilities
+    // =========================================================================
+    private static void sendJsonResponse(HttpExchange exchange, int statusCode, String jsonResponse) throws IOException {
+        byte[] response = jsonResponse.getBytes(StandardCharsets.UTF_8);
+        exchange.getResponseHeaders().add("Content-Type", "application/json; charset=UTF-8");
+        exchange.sendResponseHeaders(statusCode, response.length);
+        try (OutputStream os = exchange.getResponseBody()) {
+            os.write(response);
         }
     }
 
@@ -461,7 +702,7 @@ public class App {
     private static Map<String, String> parseJsonBody(String body) {
         Map<String, String> result = new HashMap<>();
         if (body == null || body.trim().isEmpty()) return result;
-        
+
         Pattern p = Pattern.compile("\"([^\"]+)\"\\s*:\\s*(?:\"([^\"]*)\"|(true|false)|(\\d+))");
         Matcher m = p.matcher(body);
         while (m.find()) {

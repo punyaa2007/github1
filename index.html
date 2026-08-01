@@ -164,22 +164,46 @@
 
       <!-- Tab 3: Administrator Portal -->
       <section id="tab-admin" class="tab-content">
-        <!-- Admin Access Gate -->
+        <!-- Admin Access Gate (Email & Password Authentication) -->
         <div id="admin-auth-card" class="card admin-card">
-          <div class="admin-header-badge">🔒 Administrator Authentication</div>
-          <p class="admin-desc">Enter admin passcode to unlock campus node management tools.</p>
-          <div class="input-group">
-            <label for="admin-passcode">Admin Passcode</label>
-            <input type="password" id="admin-passcode" class="form-select" placeholder="Default: admin123">
-          </div>
-          <div class="admin-btn-row">
-            <button id="btn-admin-login" class="btn btn-primary btn-block">Unlock Portal</button>
-            <button id="btn-admin-bypass" class="btn btn-secondary btn-block">Quick Unlock</button>
-          </div>
+          <div class="admin-header-badge">🔒 Administrator Sign In</div>
+          <p class="admin-desc">Sign in with authorized administrator credentials to manage campus location nodes.</p>
+          
+          <div id="admin-auth-error" class="auth-error-msg hidden"></div>
+
+          <form id="admin-login-form" onsubmit="return false;">
+            <div class="input-group">
+              <label for="admin-email">Admin Email Address</label>
+              <input type="email" id="admin-email" class="form-select" placeholder="e.g. admin@campus.edu" required autocomplete="username">
+            </div>
+            
+            <div class="input-group">
+              <label for="admin-password">Admin Password</label>
+              <input type="password" id="admin-password" class="form-select" placeholder="Enter admin password" required autocomplete="current-password">
+            </div>
+
+            <div class="admin-btn-row">
+              <button type="submit" id="btn-admin-login" class="btn btn-primary btn-block">
+                <span>Sign In to Admin Portal</span>
+                <span class="btn-arrow">→</span>
+              </button>
+            </div>
+          </form>
         </div>
 
-        <!-- Admin Portal Controls (Hidden by default until unlocked) -->
+        <!-- Admin Portal Controls (Hidden by default until authenticated) -->
         <div id="admin-dashboard" class="hidden">
+          <!-- Admin Session Profile Bar -->
+          <div class="admin-profile-bar card margin-bottom-lg">
+            <div class="admin-user-info">
+              <span class="user-badge">👤 Admin Session Active</span>
+              <span id="admin-profile-email" class="user-email">admin@campus.edu</span>
+            </div>
+            <button id="btn-admin-logout" class="btn btn-outline-danger">
+              <span>🔓 Sign Out</span>
+            </button>
+          </div>
+
           <!-- Add New Location Node Form -->
           <div class="card admin-card margin-bottom-lg">
             <div class="admin-card-header">

@@ -1,0 +1,35 @@
+
+---
+
+### 2. `.gitignore`
+**File Path**: `.gitignore` (or `C:\Users\punya\.gemini\antigravity\scratch\campus-navigation\.gitignore`)
+
+```gitignore
+# Java compiled output
+*.class
+*.jar
+*.war
+*.ear
+
+# Sensitive Runtime Data & Credentials
+admin_credentials.json
+
+# Operating System files
+.DS_Store
+Thumbs.db
+Desktop.ini
+
+# IDE & Editor files
+.idea/
+*.iml
+.vscode/
+.settings/
+.project/
+.classpath
+*.swp
+*.swo
+
+# Temporary & Log files
+*.log
+scratch/
+tmp/

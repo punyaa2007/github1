@@ -568,6 +568,23 @@ body.light-theme .brand-text h1 {
   background: var(--border-color);
 }
 
+.btn-outline-danger {
+  background: transparent;
+  color: var(--accent-rose);
+  border: 1px solid var(--accent-rose);
+  padding: 8px 14px;
+  border-radius: var(--radius-sm);
+  font-size: 0.8rem;
+  font-weight: 600;
+  cursor: pointer;
+  transition: all var(--transition-fast);
+}
+
+.btn-outline-danger:hover {
+  background: var(--accent-rose);
+  color: white;
+}
+
 .btn-block { width: 100%; }
 
 /* Route Results Card */
@@ -758,7 +775,7 @@ body.light-theme .brand-text h1 {
 }
 
 /* --------------------------------------------------------------------------
-   5. Administrator Portal Styles
+   5. Administrator Portal Styles & Security Elements
    -------------------------------------------------------------------------- */
 .admin-card {
   border-left: 4px solid var(--accent-amber);
@@ -780,6 +797,48 @@ body.light-theme .brand-text h1 {
   color: var(--text-muted);
   margin-bottom: 14px;
   line-height: 1.4;
+}
+
+.auth-error-msg {
+  background: rgba(244, 63, 94, 0.15);
+  border: 1px solid rgba(244, 63, 94, 0.3);
+  color: var(--accent-rose);
+  padding: 10px 14px;
+  border-radius: var(--radius-sm);
+  font-size: 0.8rem;
+  font-weight: 500;
+  margin-bottom: 14px;
+  line-height: 1.4;
+}
+
+.admin-profile-bar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 14px 18px;
+  background: var(--bg-card-solid);
+  border: 1px solid var(--border-color);
+  border-radius: var(--radius-md);
+  box-shadow: var(--shadow-sm);
+}
+
+.admin-user-info {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.user-badge {
+  font-size: 0.75rem;
+  color: var(--secondary-500);
+  font-weight: 700;
+  text-transform: uppercase;
+}
+
+.user-email {
+  font-size: 0.9rem;
+  font-weight: 600;
+  color: var(--text-main);
 }
 
 .admin-btn-row {
