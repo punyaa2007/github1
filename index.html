@@ -3,8 +3,8 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>NovaNav | Campus Navigation & Admin Portal</title>
-  <meta name="description" content="Interactive Campus Navigation System with real-time route pathfinding, accessibility routing, and Administrator Portal.">
+  <title>NovaNav | Smart Campus Navigation System for Persons with Disabilities</title>
+  <meta name="description" content="NovaNav - Inclusive campus navigation with voice directions, indoor positioning, wheelchair accessibility, and admin portal.">
   
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
@@ -18,14 +18,14 @@
       <div class="brand-icon">🧭</div>
       <div class="brand-text">
         <h1>NovaNav</h1>
-        <span class="brand-sub">Campus Navigation & Route Planner</span>
+        <span class="brand-sub">Smart Campus Navigation for Persons with Disabilities</span>
       </div>
     </div>
 
     <div class="header-center">
       <div class="search-box">
         <span class="search-icon">🔍</span>
-        <input type="text" id="global-search" placeholder="Search buildings, labs, dining, libraries..." autocomplete="off">
+        <input type="text" id="global-search" placeholder="Search buildings, labs, ramps, dining..." autocomplete="off">
         <button id="clear-search" class="btn-icon hidden" title="Clear Search">✕</button>
         <div id="search-results-dropdown" class="search-dropdown hidden"></div>
       </div>
@@ -36,6 +36,9 @@
         <span class="status-dot"></span>
         <span class="status-text">Connecting Server...</span>
       </div>
+      <button id="voice-master-toggle" class="btn-icon-toggle active" title="Toggle Voice Navigation Master Audio">
+        <span class="voice-icon">🔊</span>
+      </button>
       <button id="theme-toggle" class="btn-theme" title="Toggle Light/Dark Theme">
         <span class="theme-icon">🌙</span>
       </button>
@@ -62,8 +65,35 @@
       <!-- Tab 1: Route Planner -->
       <section id="tab-route" class="tab-content active">
         <div class="card route-card">
-          <h2 class="card-title">Plan Your Path</h2>
+          <h2 class="card-title">Plan Your Accessible Path</h2>
           
+          <!-- Accessibility Navigation Mode Selector -->
+          <div class="mode-selector-container">
+            <label class="section-label">Select Navigation Mode:</label>
+            <div class="mode-pills" id="mode-pills">
+              <button class="mode-pill active" data-mode="wheelchair" title="Avoid stairs, prioritize ramps & elevators">
+                <span class="mode-icon">♿</span>
+                <span>Wheelchair</span>
+              </button>
+              <button class="mode-pill" data-mode="visually_impaired" title="Voice-guided steps & tactile paving pathways">
+                <span class="mode-icon">👁️</span>
+                <span>Visually Impaired</span>
+              </button>
+              <button class="mode-pill" data-mode="hearing_impaired" title="High-contrast visual directions & landmark indicators">
+                <span class="mode-icon">👂</span>
+                <span>Hearing Impaired</span>
+              </button>
+              <button class="mode-pill" data-mode="shortest" title="Direct minimum-distance path">
+                <span class="mode-icon">⚡</span>
+                <span>Shortest</span>
+              </button>
+              <button class="mode-pill" data-mode="safest" title="Well-lit main campus quads & safe walkways">
+                <span class="mode-icon">🛡️</span>
+                <span>Safest</span>
+              </button>
+            </div>
+          </div>
+
           <form id="route-form" class="route-form">
             <div class="input-group">
               <label for="start-location">
@@ -89,28 +119,70 @@
               </select>
             </div>
 
-            <div class="checkbox-group">
-              <label class="custom-checkbox">
-                <input type="checkbox" id="accessible-only">
-                <span class="checkbox-box"></span>
-                <span class="checkbox-label">
-                  ♿ Accessible Route Only
-                  <small>Avoid stairs, prioritize ramps & elevators</small>
-                </span>
-              </label>
-            </div>
-
             <button type="submit" id="btn-find-route" class="btn btn-primary btn-block">
-              <span>Find Shortest Route</span>
+              <span>Find Best Route</span>
               <span class="btn-arrow">→</span>
             </button>
           </form>
         </div>
 
+        <!-- Live Navigation Control & Status Panel -->
+        <div id="navigation-control-deck" class="card control-deck-card hidden">
+          <div class="deck-header">
+            <div class="deck-title-group">
+              <span class="pulse-indicator"></span>
+              <h3 id="nav-status-label" class="deck-title">Ready for Navigation</h3>
+            </div>
+            <span id="nav-mode-badge" class="badge badge-mode-wheelchair">♿ Wheelchair Mode</span>
+          </div>
+
+          <!-- Indoor Positioning Status Widget -->
+          <div class="ips-status-widget">
+            <div class="ips-location-box">
+              <span class="ips-icon">📍</span>
+              <div class="ips-details">
+                <span id="ips-building" class="ips-building-name">Central Campus Library</span>
+                <span id="ips-floor" class="ips-floor-level">Floor 1 • Main Quad Waypoint</span>
+              </div>
+            </div>
+            <div id="ips-positioning-tech" class="ips-tech-badge" title="Positioning Engine Mode">
+              <span>📡 Indoor IPS Active</span>
+            </div>
+          </div>
+
+          <!-- Navigation Control Buttons -->
+          <div class="nav-btn-toolbar">
+            <button id="btn-nav-start" class="btn btn-success flex-1">
+              <span>▶ Start Voice Navigation</span>
+            </button>
+            <button id="btn-nav-pause" class="btn btn-warning flex-1 hidden">
+              <span>⏸ Pause</span>
+            </button>
+            <button id="btn-nav-resume" class="btn btn-info flex-1 hidden">
+              <span>▶ Resume</span>
+            </button>
+            <button id="btn-nav-stop" class="btn btn-danger flex-1 hidden">
+              <span>⏹ Stop</span>
+            </button>
+            <button id="btn-nav-mute" class="btn btn-secondary btn-icon-only" title="Mute/Unmute Spoken Voice">
+              <span id="mute-icon">🔊</span>
+            </button>
+          </div>
+
+          <!-- Progress Bar -->
+          <div class="nav-progress-container">
+            <div id="nav-progress-bar" class="nav-progress-bar" style="width: 0%;"></div>
+          </div>
+          <div class="nav-step-banner">
+            <span class="step-label-tag">NEXT INSTRUCTION:</span>
+            <p id="current-step-instruction" class="step-text">Click "Start Voice Navigation" to begin step-by-step guidance.</p>
+          </div>
+        </div>
+
         <div id="route-results" class="card route-results-card hidden">
           <div class="results-header">
             <div class="results-meta">
-              <span id="route-badge-accessible" class="badge badge-accessible hidden">♿ Accessible Route</span>
+              <span id="route-badge-accessible" class="badge badge-accessible">♿ Accessible Route</span>
               <h3 class="results-title">Directions Summary</h3>
             </div>
             <button id="btn-clear-route" class="btn-text-danger" title="Clear current route">Clear Route</button>
@@ -128,13 +200,13 @@
               <span class="stat-icon">⏱️</span>
               <div class="stat-data">
                 <span id="stat-time" class="stat-value">0 min</span>
-                <span class="stat-label">Est. Walk Time</span>
+                <span class="stat-label">Est. Travel Time</span>
               </div>
             </div>
           </div>
 
           <div class="directions-list-container">
-            <h4>Turn-by-Turn Steps</h4>
+            <h4>Turn-by-Turn Spoken Steps</h4>
             <ol id="directions-list" class="directions-list">
             </ol>
           </div>
@@ -164,7 +236,6 @@
 
       <!-- Tab 3: Administrator Portal -->
       <section id="tab-admin" class="tab-content">
-        <!-- Admin Access Gate (Email & Password Authentication) -->
         <div id="admin-auth-card" class="card admin-card">
           <div class="admin-header-badge">🔒 Administrator Sign In</div>
           <p class="admin-desc">Sign in with authorized administrator credentials to manage campus location nodes.</p>
@@ -191,9 +262,8 @@
           </form>
         </div>
 
-        <!-- Admin Portal Controls (Hidden by default until authenticated) -->
+        <!-- Admin Portal Controls -->
         <div id="admin-dashboard" class="hidden">
-          <!-- Admin Session Profile Bar -->
           <div class="admin-profile-bar card margin-bottom-lg">
             <div class="admin-user-info">
               <span class="user-badge">👤 Admin Session Active</span>
@@ -204,7 +274,6 @@
             </button>
           </div>
 
-          <!-- Add New Location Node Form -->
           <div class="card admin-card margin-bottom-lg">
             <div class="admin-card-header">
               <h3 class="card-title">➕ Add New Campus Location Node</h3>
@@ -244,7 +313,6 @@
                 </div>
               </div>
 
-              <!-- Map Coordinate Picker Button -->
               <div class="coord-picker-box">
                 <button type="button" id="btn-pick-coords" class="btn btn-secondary btn-block">
                   📍 Click Map to Pick Coordinates (X, Y)
@@ -289,7 +357,6 @@
             </form>
           </div>
 
-          <!-- Existing Nodes Management List -->
           <div class="card admin-card">
             <div class="admin-card-header">
               <h3 class="card-title">🗑️ Existing Nodes Manager</h3>
@@ -297,7 +364,6 @@
             </div>
 
             <div id="admin-nodes-list" class="admin-nodes-grid">
-              <!-- Dynamically populated with delete buttons -->
             </div>
           </div>
         </div>
@@ -314,6 +380,7 @@
         <div class="toolbar-group">
           <button id="btn-toggle-labels" class="toolbar-btn active" title="Toggle Labels">🏷️</button>
           <button id="btn-toggle-paths" class="toolbar-btn active" title="Toggle Graph Network">🕸️</button>
+          <button id="btn-toggle-accessibility-features" class="toolbar-btn active" title="Toggle Ramps, Elevators & Restroom Icons">♿ Icons</button>
         </div>
       </div>
 
@@ -321,14 +388,19 @@
         <div class="legend-item"><span class="legend-color legend-walkway"></span> Walkway</div>
         <div class="legend-item"><span class="legend-color legend-accessible"></span> Accessible Ramp</div>
         <div class="legend-item"><span class="legend-color legend-stair"></span> Staircase</div>
-        <div class="legend-item"><span class="legend-color legend-active-path"></span> Active Route</div>
+        <div class="legend-item"><span id="legend-active-indicator" class="legend-color legend-active-path"></span> Active Mode Route</div>
+        <div class="legend-item"><span class="legend-icon-tag">♿ Ramp</span></div>
+        <div class="legend-item"><span class="legend-icon-tag">🛗 Elevator</span></div>
+        <div class="legend-item"><span class="legend-icon-tag">🚪 Power Entrance</span></div>
+        <div class="legend-item"><span class="legend-icon-tag">🚻 ADA Restroom</span></div>
+        <div class="legend-item"><span class="legend-icon-tag">🚨 Exit</span></div>
       </div>
 
       <div id="map-container" class="map-container">
         <svg id="campus-svg" viewBox="0 0 1000 800" preserveAspectRatio="xMidYMid meet">
           <defs>
             <filter id="glow-route" x="-20%" y="-20%" width="140%" height="140%">
-              <feGaussianBlur stdDeviation="4" result="blur" />
+              <feGaussianBlur stdDeviation="5" result="blur" />
               <feComposite in="SourceGraphic" in2="blur" operator="over" />
             </filter>
             
@@ -336,8 +408,14 @@
               <stop offset="0%" stop-color="#6366f1" />
               <stop offset="100%" stop-color="#4f46e5" />
             </radialGradient>
+
+            <radialGradient id="user-location-glow" cx="50%" cy="50%" r="50%">
+              <stop offset="0%" stop-color="#3b82f6" stop-opacity="0.9" />
+              <stop offset="100%" stop-color="#2563eb" stop-opacity="0.2" />
+            </radialGradient>
           </defs>
 
+          <!-- Layer 1: Grounds & Buildings -->
           <g id="layer-grounds">
             <rect x="0" y="0" width="1000" height="800" fill="var(--map-bg)" />
             <rect x="300" y="220" width="220" height="180" rx="20" fill="var(--map-grass)" />
@@ -345,17 +423,35 @@
             <circle cx="200" cy="200" r="90" fill="var(--map-grass)" opacity="0.6" />
           </g>
 
+          <!-- Layer 2: Accessibility Map Features (Ramps, Elevators, Restrooms, Entrances, Exits) -->
+          <g id="layer-accessibility-features"></g>
+
+          <!-- Layer 3: Network Graph Edges -->
           <g id="layer-edges"></g>
+
+          <!-- Layer 4: Active Navigation Path -->
           <g id="layer-active-route"></g>
+
+          <!-- Layer 5: Route Waypoint Markers -->
+          <g id="layer-waypoints"></g>
+
+          <!-- Layer 6: Campus Building Nodes -->
           <g id="layer-nodes"></g>
+
+          <!-- Layer 7: Building Labels -->
           <g id="layer-labels"></g>
-          <!-- Layer 6: Admin Preview Node Pin -->
+
+          <!-- Layer 8: Indoor Positioning Live User Marker Avatar -->
+          <g id="layer-user-location"></g>
+
+          <!-- Layer 9: Admin Preview Node Pin -->
           <g id="layer-admin-preview"></g>
         </svg>
       </div>
     </section>
   </main>
 
+  <!-- Location Detail Modal -->
   <div id="location-modal" class="modal-backdrop hidden">
     <div class="modal-card">
       <button id="modal-close" class="modal-close-btn">&times;</button>
@@ -374,7 +470,7 @@
           <div class="info-pill"><span class="pill-label">Wheelchair Access:</span> <strong id="modal-accessible">Yes</strong></div>
         </div>
         <div class="modal-amenities">
-          <h4>Key Amenities</h4>
+          <h4>Key Accessibility Amenities</h4>
           <div id="modal-amenities-tags" class="amenities-tags"></div>
         </div>
       </div>

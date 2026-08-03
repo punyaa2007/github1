@@ -47,26 +47,54 @@ public class App {
     }
 
     static class Location {
-        String id, name, code, category, description, icon;
-        int x, y, floors;
+        String id;
+        String name;
+        String code;
+        String category;
+        int x;
+        int y;
+        int floors;
         boolean accessible;
+        String description;
+        String icon;
 
         Location(String id, String name, String code, String category, int x, int y, int floors, boolean accessible, String description, String icon) {
-            this.id = id; this.name = name; this.code = code; this.category = category;
-            this.x = x; this.y = y; this.floors = floors; this.accessible = accessible;
-            this.description = description; this.icon = icon;
+            this.id = id;
+            this.name = name;
+            this.code = code;
+            this.category = category;
+            this.x = x;
+            this.y = y;
+            this.floors = floors;
+            this.accessible = accessible;
+            this.description = description;
+            this.icon = icon;
         }
     }
 
     static class Route {
-        String id, from, to, type;
-        int distance, time;
+        String id;
+        String from;
+        String to;
+        int distance;
+        int time;
+        String type;
         boolean accessible;
+        int safetyScore;
+        boolean tactilePaving;
+        boolean hasStairs;
 
-        Route(String id, String from, String to, int distance, int time, String type, boolean accessible) {
-            this.id = id; this.from = from; this.to = to;
-            this.distance = distance; this.time = time;
-            this.type = type; this.accessible = accessible;
+        Route(String id, String from, String to, int distance, int time, String type, boolean accessible, int safetyScore, boolean tactilePaving, boolean hasStairs) {
+            this.id = id;
+            this.from = from;
+            this.to = to;
+            this.distance = distance;
+            this.time = time;
+            this.type = type;
+            this.accessible = accessible;
+            this.safetyScore = safetyScore;
+            this.tactilePaving = tactilePaving;
+            this.hasStairs = hasStairs;
         }
     }
 
@@ -75,10 +103,13 @@ public class App {
         initAdminSecurity();
 
         HttpServer server = HttpServer.create(new InetSocketAddress(PORT), 0);
+
         server.createContext("/api/data", new CorsHandler(new DataHandler()));
         server.createContext("/api/locations", new CorsHandler(new LocationsHandler()));
         server.createContext("/api/navigate", new CorsHandler(new NavigateHandler()));
         server.createContext("/api/health", new CorsHandler(new HealthHandler()));
+        
+        // Admin Auth & Protected Endpoints
         server.createContext("/api/admin/login", new CorsHandler(new AdminLoginHandler()));
         server.createContext("/api/admin/logout", new CorsHandler(new AdminLogoutHandler()));
         server.createContext("/api/admin/session", new CorsHandler(new AdminSessionHandler()));
@@ -88,13 +119,14 @@ public class App {
         server.setExecutor(java.util.concurrent.Executors.newCachedThreadPool());
         server.start();
         System.out.println("=================================================");
-        System.out.println("Campus Navigation Server running on port " + PORT);
-        System.out.println("Admin Email: " + storedAdminEmail);
+        System.out.println("NovaNav Campus Navigation Server running on port " + PORT);
+        System.out.println("API Data: http://localhost:" + PORT + "/api/data");
+        System.out.println("Admin Account Email: " + storedAdminEmail);
         System.out.println("=================================================");
     }
 
     // =========================================================================
-    // Security & PBKDF2 Hashing
+    // Security & Password Hashing Methods (PBKDF2)
     // =========================================================================
     private static void initAdminSecurity() {
         try {
@@ -104,8 +136,9 @@ public class App {
                 storedAdminEmail = creds.getOrDefault("email", "admin@campus.edu");
                 storedPasswordHash = creds.getOrDefault("hash", "");
                 storedSaltHex = creds.getOrDefault("salt", "");
-                System.out.println("Loaded admin credentials from " + CREDENTIALS_FILE);
+                System.out.println("Loaded secure admin credentials from " + CREDENTIALS_FILE);
             } else {
+                System.out.println("Initializing default admin credentials (admin@campus.edu)...");
                 byte[] salt = generateSalt();
                 storedAdminEmail = "admin@campus.edu";
                 storedSaltHex = bytesToHex(salt);
@@ -122,23 +155,27 @@ public class App {
             String json = String.format("{\n  \"email\": \"%s\",\n  \"hash\": \"%s\",\n  \"salt\": \"%s\"\n}\n",
                     escapeJson(storedAdminEmail), storedPasswordHash, storedSaltHex);
             Files.write(Paths.get(CREDENTIALS_FILE), json.getBytes(StandardCharsets.UTF_8));
+            System.out.println("Saved admin credentials to " + CREDENTIALS_FILE);
         } catch (Exception e) {
-            System.err.println("Failed to write credentials: " + e.getMessage());
+            System.err.println("Failed to write credentials file: " + e.getMessage());
         }
     }
 
     private static byte[] generateSalt() {
+        SecureRandom random = new SecureRandom();
         byte[] salt = new byte[16];
-        new SecureRandom().nextBytes(salt);
+        random.nextBytes(salt);
         return salt;
     }
 
     private static String hashPassword(String password, byte[] salt) {
         try {
             KeySpec spec = new PBEKeySpec(password.toCharArray(), salt, 65536, 256);
-            return bytesToHex(SecretKeyFactory.getInstance("PBKDF2WithHmacSHA256").generateSecret(spec).getEncoded());
+            SecretKeyFactory factory = SecretKeyFactory.getInstance("PBKDF2WithHmacSHA256");
+            byte[] hash = factory.generateSecret(spec).getEncoded();
+            return bytesToHex(hash);
         } catch (Exception e) {
-            throw new RuntimeException("PBKDF2 error: " + e.getMessage(), e);
+            throw new RuntimeException("Error hashing password with PBKDF2: " + e.getMessage(), e);
         }
     }
 
@@ -147,40 +184,48 @@ public class App {
         if (!email.trim().equalsIgnoreCase(storedAdminEmail.trim())) return false;
         try {
             byte[] salt = hexToBytes(storedSaltHex);
-            return hashPassword(rawPassword, salt).equalsIgnoreCase(storedPasswordHash);
+            String computedHash = hashPassword(rawPassword, salt);
+            return computedHash.equalsIgnoreCase(storedPasswordHash);
         } catch (Exception e) {
-            System.err.println("Password verify error: " + e.getMessage());
+            System.err.println("Verify password error: " + e.getMessage());
             return false;
         }
     }
 
     private static String bytesToHex(byte[] bytes) {
         StringBuilder sb = new StringBuilder();
-        for (byte b : bytes) sb.append(String.format("%02x", b));
+        for (byte b : bytes) {
+            sb.append(String.format("%02x", b));
+        }
         return sb.toString();
     }
 
     private static byte[] hexToBytes(String hex) {
         int len = hex.length();
         byte[] data = new byte[len / 2];
-        for (int i = 0; i < len; i += 2)
-            data[i / 2] = (byte) ((Character.digit(hex.charAt(i), 16) << 4) + Character.digit(hex.charAt(i + 1), 16));
+        for (int i = 0; i < len; i += 2) {
+            data[i / 2] = (byte) ((Character.digit(hex.charAt(i), 16) << 4)
+                    + Character.digit(hex.charAt(i + 1), 16));
+        }
         return data;
     }
 
     // =========================================================================
-    // Session Helpers (Header + Cookie dual support)
+    // Session & Cookie Helper Methods
     // =========================================================================
     private static AdminSession validateSession(HttpExchange exchange) {
-        // Check X-Session-Token header first (reliable for local dev cross-origin)
         String sessionId = exchange.getRequestHeaders().getFirst("X-Session-Token");
-        // Fallback to cookie
-        if (sessionId == null || sessionId.isEmpty()) sessionId = getSessionIdFromCookie(exchange);
+        if (sessionId == null || sessionId.isEmpty()) {
+            sessionId = getSessionIdFromCookie(exchange);
+        }
         if (sessionId == null || sessionId.isEmpty()) return null;
 
         AdminSession session = activeSessions.get(sessionId);
         if (session == null) return null;
-        if (session.isExpired()) { activeSessions.remove(sessionId); return null; }
+        if (session.isExpired()) {
+            activeSessions.remove(sessionId);
+            return null;
+        }
         return session;
     }
 
@@ -188,10 +233,12 @@ public class App {
         List<String> cookieHeaders = exchange.getRequestHeaders().get("Cookie");
         if (cookieHeaders != null) {
             for (String header : cookieHeaders) {
-                for (String cookie : header.split(";")) {
+                String[] cookies = header.split(";");
+                for (String cookie : cookies) {
                     String[] pair = cookie.trim().split("=", 2);
-                    if (pair.length == 2 && "session_id".equalsIgnoreCase(pair[0].trim()))
+                    if (pair.length == 2 && "session_id".equalsIgnoreCase(pair[0].trim())) {
                         return pair[1].trim();
+                    }
                 }
             }
         }
@@ -199,343 +246,514 @@ public class App {
     }
 
     private static void setSessionCookie(HttpExchange exchange, String sessionId) {
-        exchange.getResponseHeaders().add("Set-Cookie",
-                String.format("session_id=%s; Path=/; HttpOnly; SameSite=Lax", sessionId));
+        String cookieValue = String.format("session_id=%s; Path=/; HttpOnly; SameSite=Lax", sessionId);
+        exchange.getResponseHeaders().add("Set-Cookie", cookieValue);
     }
 
     private static void clearSessionCookie(HttpExchange exchange) {
-        exchange.getResponseHeaders().add("Set-Cookie",
-                "session_id=; Path=/; Expires=Thu, 01 Jan 1970 00:00:00 GMT; HttpOnly; SameSite=Lax");
+        String cookieValue = "session_id=; Path=/; Expires=Thu, 01 Jan 1970 00:00:00 GMT; HttpOnly; SameSite=Lax";
+        exchange.getResponseHeaders().add("Set-Cookie", cookieValue);
     }
 
     // =========================================================================
-    // Data Management
+    // Data Operations
     // =========================================================================
     private static void loadData() {
         try {
-            if (Files.exists(Paths.get("data.json"))) {
-                rawJsonData = new String(Files.readAllBytes(Paths.get("data.json")), StandardCharsets.UTF_8);
+            File f = new File("data.json");
+            if (f.exists()) {
+                rawJsonData = new String(Files.readAllBytes(f.toPath()), StandardCharsets.UTF_8);
+                parseAndPopulateData(rawJsonData);
+                System.out.println("Loaded campus dataset successfully from data.json (" + locations.size() + " locations, " + routes.size() + " routes)");
             } else {
+                System.err.println("data.json not found! Falling back to embedded initial dataset...");
                 rawJsonData = getFallbackJson();
+                parseAndPopulateData(rawJsonData);
             }
-            parseJson(rawJsonData);
-            System.out.println("Loaded " + locations.size() + " locations and " + routes.size() + " routes.");
         } catch (Exception e) {
-            System.err.println("Error loading data: " + e.getMessage());
-            rawJsonData = getFallbackJson();
-            parseJson(rawJsonData);
+            System.err.println("Error reading data.json: " + e.getMessage());
         }
     }
 
-    private static void parseJson(String json) {
-        locations.clear(); routes.clear(); locationMap.clear();
-        int locStart = json.indexOf("\"locations\":");
-        int routesStart = json.indexOf("\"routes\":");
-        if (locStart == -1 || routesStart == -1) return;
+    private static void parseAndPopulateData(String json) {
+        locations.clear();
+        routes.clear();
+        locationMap.clear();
 
-        Pattern locPattern = Pattern.compile("\\{\\s*\"id\":\\s*\"([^\"]+)\",\\s*\"name\":\\s*\"([^\"]+)\",\\s*\"code\":\\s*\"([^\"]+)\",\\s*\"category\":\\s*\"([^\"]+)\",\\s*\"x\":\\s*(\\d+),\\s*\"y\":\\s*(\\d+),\\s*\"floors\":\\s*(\\d+),\\s*\"accessible\":\\s*(true|false),\\s*\"description\":\\s*\"([^\"]+)\",\\s*\"icon\":\\s*\"([^\"]+)\"");
-        Matcher m = locPattern.matcher(json.substring(locStart, routesStart));
-        while (m.find()) {
-            Location loc = new Location(m.group(1), m.group(2), m.group(3), m.group(4),
-                    Integer.parseInt(m.group(5)), Integer.parseInt(m.group(6)),
-                    Integer.parseInt(m.group(7)), Boolean.parseBoolean(m.group(8)), m.group(9), m.group(10));
-            locations.add(loc); locationMap.put(loc.id, loc);
+        // Regex parsing for locations
+        Pattern locPattern = Pattern.compile("\\{\\s*\"id\":\\s*\"([^\"]+)\"\\s*,\\s*\"name\":\\s*\"([^\"]+)\"\\s*,\\s*\"code\":\\s*\"([^\"]+)\"\\s*,\\s*\"category\":\\s*\"([^\"]+)\"\\s*,\\s*\"x\":\\s*(\\d+)\\s*,\\s*\"y\":\\s*(\\d+)\\s*,\\s*\"floors\":\\s*(\\d+)\\s*,\\s*\"accessible\":\\s*(true|false)\\s*,\\s*\"description\":\\s*\"([^\"]+)\"\\s*,\\s*\"icon\":\\s*\"([^\"]+)\"");
+        Matcher locMatcher = locPattern.matcher(json);
+        while (locMatcher.find()) {
+            Location loc = new Location(
+                    locMatcher.group(1),
+                    locMatcher.group(2),
+                    locMatcher.group(3),
+                    locMatcher.group(4),
+                    Integer.parseInt(locMatcher.group(5)),
+                    Integer.parseInt(locMatcher.group(6)),
+                    Integer.parseInt(locMatcher.group(7)),
+                    Boolean.parseBoolean(locMatcher.group(8)),
+                    locMatcher.group(9),
+                    locMatcher.group(10)
+            );
+            locations.add(loc);
+            locationMap.put(loc.id, loc);
         }
 
-        Pattern routePattern = Pattern.compile("\\{\\s*\"id\":\\s*\"([^\"]+)\",\\s*\"from\":\\s*\"([^\"]+)\",\\s*\"to\":\\s*\"([^\"]+)\",\\s*\"distance\":\\s*(\\d+),\\s*\"time\":\\s*(\\d+),\\s*\"type\":\\s*\"([^\"]+)\",\\s*\"accessible\":\\s*(true|false)");
-        Matcher rm = routePattern.matcher(json.substring(routesStart));
-        while (rm.find()) {
-            routes.add(new Route(rm.group(1), rm.group(2), rm.group(3),
-                    Integer.parseInt(rm.group(4)), Integer.parseInt(rm.group(5)), rm.group(6), Boolean.parseBoolean(rm.group(7))));
+        // Regex parsing for routes
+        Pattern routePattern = Pattern.compile("\\{\\s*\"id\":\\s*\"([^\"]+)\"\\s*,\\s*\"from\":\\s*\"([^\"]+)\"\\s*,\\s*\"to\":\\s*\"([^\"]+)\"\\s*,\\s*\"distance\":\\s*(\\d+)\\s*,\\s*\"time\":\\s*(\\d+)\\s*,\\s*\"type\":\\s*\"([^\"]+)\"\\s*,\\s*\"accessible\":\\s*(true|false)");
+        Matcher routeMatcher = routePattern.matcher(json);
+        while (routeMatcher.find()) {
+            String id = routeMatcher.group(1);
+            String from = routeMatcher.group(2);
+            String to = routeMatcher.group(3);
+            int dist = Integer.parseInt(routeMatcher.group(4));
+            int time = Integer.parseInt(routeMatcher.group(5));
+            String type = routeMatcher.group(6);
+            boolean acc = Boolean.parseBoolean(routeMatcher.group(7));
+            
+            boolean tactile = type.toLowerCase().contains("paved") || type.toLowerCase().contains("quad") || type.toLowerCase().contains("ramp");
+            boolean stairs = type.toLowerCase().contains("stair");
+            int safety = stairs ? 2 : 5;
+
+            routes.add(new Route(id, from, to, dist, time, type, acc, safety, tactile, stairs));
         }
     }
 
     private static synchronized void saveDataToDisk() {
         try {
-            StringBuilder sb = new StringBuilder("{\n  \"campusInfo\": {\"name\": \"Nova Horizon University Campus\", \"mapDimensions\": {\"width\": 1000, \"height\": 800}},\n  \"locations\": [\n");
+            StringBuilder sb = new StringBuilder();
+            sb.append("{\n");
+            sb.append("  \"campusInfo\": {\n");
+            sb.append("    \"name\": \"Nova Horizon University Campus\",\n");
+            sb.append("    \"mapDimensions\": {\"width\": 1000, \"height\": 800}\n");
+            sb.append("  },\n");
+
+            sb.append("  \"locations\": [\n");
             for (int i = 0; i < locations.size(); i++) {
                 Location l = locations.get(i);
-                sb.append(String.format("    {\"id\":\"%s\",\"name\":\"%s\",\"code\":\"%s\",\"category\":\"%s\",\"x\":%d,\"y\":%d,\"floors\":%d,\"accessible\":%b,\"description\":\"%s\",\"icon\":\"%s\"}",
-                        l.id, escapeJson(l.name), escapeJson(l.code), escapeJson(l.category), l.x, l.y, l.floors, l.accessible, escapeJson(l.description), l.icon));
+                sb.append(String.format("    {\n      \"id\": \"%s\",\n      \"name\": \"%s\",\n      \"code\": \"%s\",\n      \"category\": \"%s\",\n      \"x\": %d,\n      \"y\": %d,\n      \"floors\": %d,\n      \"accessible\": %b,\n      \"description\": \"%s\",\n      \"icon\": \"%s\"\n    }",
+                        escapeJson(l.id), escapeJson(l.name), escapeJson(l.code), escapeJson(l.category), l.x, l.y, l.floors, l.accessible, escapeJson(l.description), escapeJson(l.icon)));
                 if (i < locations.size() - 1) sb.append(",");
                 sb.append("\n");
             }
-            sb.append("  ],\n  \"routes\": [\n");
+            sb.append("  ],\n");
+
+            sb.append("  \"routes\": [\n");
             for (int i = 0; i < routes.size(); i++) {
                 Route r = routes.get(i);
-                sb.append(String.format("    {\"id\":\"%s\",\"from\":\"%s\",\"to\":\"%s\",\"distance\":%d,\"time\":%d,\"type\":\"%s\",\"accessible\":%b}",
-                        r.id, r.from, r.to, r.distance, r.time, escapeJson(r.type), r.accessible));
+                sb.append(String.format("    {\"id\": \"%s\", \"from\": \"%s\", \"to\": \"%s\", \"distance\": %d, \"time\": %d, \"type\": \"%s\", \"accessible\": %b, \"safetyScore\": %d, \"tactilePaving\": %b, \"hasStairs\": %b}",
+                        escapeJson(r.id), escapeJson(r.from), escapeJson(r.to), r.distance, r.time, escapeJson(r.type), r.accessible, r.safetyScore, r.tactilePaving, r.hasStairs));
                 if (i < routes.size() - 1) sb.append(",");
                 sb.append("\n");
             }
-            sb.append("  ]\n}\n");
+            sb.append("  ]\n");
+            sb.append("}\n");
+
             rawJsonData = sb.toString();
             Files.write(Paths.get("data.json"), rawJsonData.getBytes(StandardCharsets.UTF_8));
+            System.out.println("Updated data.json persisted to disk successfully.");
         } catch (Exception e) {
-            System.err.println("Error saving data: " + e.getMessage());
+            System.err.println("Failed to write data.json: " + e.getMessage());
         }
     }
 
     // =========================================================================
-    // HTTP Handlers
+    // CORS Handler Middleware
     // =========================================================================
     static class CorsHandler implements HttpHandler {
         private final HttpHandler next;
-        CorsHandler(HttpHandler next) { this.next = next; }
+
+        CorsHandler(HttpHandler next) {
+            this.next = next;
+        }
 
         @Override
         public void handle(HttpExchange exchange) throws IOException {
-            List<String> origins = exchange.getRequestHeaders().get("Origin");
-            String origin = (origins != null && !origins.isEmpty()) ? origins.get(0) : "*";
-            exchange.getResponseHeaders().set("Access-Control-Allow-Origin", origin);
-            exchange.getResponseHeaders().set("Access-Control-Allow-Credentials", "true");
-            exchange.getResponseHeaders().set("Access-Control-Allow-Methods", "GET, POST, OPTIONS");
-            exchange.getResponseHeaders().set("Access-Control-Allow-Headers", "Content-Type, Authorization, Cookie, X-Session-Token");
-            if ("OPTIONS".equalsIgnoreCase(exchange.getRequestMethod())) {
-                exchange.sendResponseHeaders(204, -1); return;
+            String origin = exchange.getRequestHeaders().getFirst("Origin");
+            if (origin != null && !origin.isEmpty()) {
+                exchange.getResponseHeaders().add("Access-Control-Allow-Origin", origin);
+            } else {
+                exchange.getResponseHeaders().add("Access-Control-Allow-Origin", "*");
             }
+            exchange.getResponseHeaders().add("Access-Control-Allow-Credentials", "true");
+            exchange.getResponseHeaders().add("Access-Control-Allow-Methods", "GET, POST, OPTIONS");
+            exchange.getResponseHeaders().add("Access-Control-Allow-Headers", "Content-Type, Authorization, X-Requested-With, X-Session-Token");
+
+            if ("OPTIONS".equalsIgnoreCase(exchange.getRequestMethod())) {
+                exchange.sendResponseHeaders(204, -1);
+                return;
+            }
+
             next.handle(exchange);
         }
     }
 
+    // =========================================================================
+    // API Endpoints
+    // =========================================================================
     static class DataHandler implements HttpHandler {
-        @Override public void handle(HttpExchange e) throws IOException {
-            byte[] r = rawJsonData.getBytes(StandardCharsets.UTF_8);
-            e.getResponseHeaders().add("Content-Type", "application/json; charset=UTF-8");
-            e.sendResponseHeaders(200, r.length);
-            try (OutputStream os = e.getResponseBody()) { os.write(r); }
+        @Override
+        public void handle(HttpExchange exchange) throws IOException {
+            if (!"GET".equalsIgnoreCase(exchange.getRequestMethod())) {
+                sendJsonResponse(exchange, 405, "{\"success\":false,\"error\":\"Method Not Allowed\"}");
+                return;
+            }
+            sendJsonResponse(exchange, 200, rawJsonData);
         }
     }
 
     static class LocationsHandler implements HttpHandler {
-        @Override public void handle(HttpExchange e) throws IOException {
+        @Override
+        public void handle(HttpExchange exchange) throws IOException {
+            if (!"GET".equalsIgnoreCase(exchange.getRequestMethod())) {
+                sendJsonResponse(exchange, 405, "{\"success\":false,\"error\":\"Method Not Allowed\"}");
+                return;
+            }
             StringBuilder sb = new StringBuilder("[");
             for (int i = 0; i < locations.size(); i++) {
                 Location l = locations.get(i);
                 sb.append(String.format("{\"id\":\"%s\",\"name\":\"%s\",\"code\":\"%s\",\"category\":\"%s\",\"x\":%d,\"y\":%d,\"floors\":%d,\"accessible\":%b,\"description\":\"%s\",\"icon\":\"%s\"}",
-                        l.id, escapeJson(l.name), escapeJson(l.code), escapeJson(l.category), l.x, l.y, l.floors, l.accessible, escapeJson(l.description), l.icon));
+                        escapeJson(l.id), escapeJson(l.name), escapeJson(l.code), escapeJson(l.category), l.x, l.y, l.floors, l.accessible, escapeJson(l.description), escapeJson(l.icon)));
                 if (i < locations.size() - 1) sb.append(",");
             }
             sb.append("]");
-            byte[] r = sb.toString().getBytes(StandardCharsets.UTF_8);
-            e.getResponseHeaders().add("Content-Type", "application/json; charset=UTF-8");
-            e.sendResponseHeaders(200, r.length);
-            try (OutputStream os = e.getResponseBody()) { os.write(r); }
+            sendJsonResponse(exchange, 200, sb.toString());
         }
     }
 
     static class HealthHandler implements HttpHandler {
-        @Override public void handle(HttpExchange e) throws IOException {
-            byte[] r = "{\"status\":\"OK\",\"version\":\"2.0.0\"}".getBytes(StandardCharsets.UTF_8);
-            e.getResponseHeaders().add("Content-Type", "application/json; charset=UTF-8");
-            e.sendResponseHeaders(200, r.length);
-            try (OutputStream os = e.getResponseBody()) { os.write(r); }
+        @Override
+        public void handle(HttpExchange exchange) throws IOException {
+            sendJsonResponse(exchange, 200, "{\"status\":\"ONLINE\",\"version\":\"2.0\",\"authenticatedAdmin\":\"" + escapeJson(storedAdminEmail) + "\"}");
         }
     }
 
-    // =========================================================================
-    // Admin Auth Handlers
-    // =========================================================================
     static class AdminLoginHandler implements HttpHandler {
-        @Override public void handle(HttpExchange exchange) throws IOException {
+        @Override
+        public void handle(HttpExchange exchange) throws IOException {
             if (!"POST".equalsIgnoreCase(exchange.getRequestMethod())) {
-                sendJsonResponse(exchange, 405, "{\"success\":false,\"error\":\"Method Not Allowed\"}"); return;
+                sendJsonResponse(exchange, 405, "{\"success\":false,\"error\":\"Method Not Allowed\"}");
+                return;
             }
-            Map<String, String> params = parseJsonBody(readStream(exchange.getRequestBody()));
-            String email = params.get("email");
-            String password = params.get("password");
 
-            if (email == null || email.trim().isEmpty() || password == null || password.trim().isEmpty()) {
-                sendJsonResponse(exchange, 400, "{\"success\":false,\"error\":\"Email and password are required.\"}"); return;
-            }
+            String body = readStream(exchange.getRequestBody());
+            Map<String, String> creds = parseJsonBody(body);
+            String email = creds.get("email");
+            String password = creds.get("password");
 
             if (verifyAdminPassword(email, password)) {
                 String sessionId = UUID.randomUUID().toString();
-                activeSessions.put(sessionId, new AdminSession(sessionId, email.trim().toLowerCase(), 86400000L));
+                AdminSession session = new AdminSession(sessionId, email, 24 * 60 * 60 * 1000L); // 24 Hours
+                activeSessions.put(sessionId, session);
                 setSessionCookie(exchange, sessionId);
-                System.out.println("Admin login OK: " + email);
-                // Return sessionToken in response body for JS header-based auth
-                sendJsonResponse(exchange, 200, String.format("{\"success\":true,\"message\":\"Login successful\",\"email\":\"%s\",\"sessionToken\":\"%s\"}", escapeJson(email), sessionId));
+
+                String jsonResponse = String.format("{\"success\":true,\"message\":\"Authentication successful\",\"email\":\"%s\",\"sessionToken\":\"%s\"}",
+                        escapeJson(email), sessionId);
+                sendJsonResponse(exchange, 200, jsonResponse);
             } else {
-                System.err.println("Admin login FAILED: " + email);
-                sendJsonResponse(exchange, 401, "{\"success\":false,\"error\":\"Invalid email or password.\"}");
+                sendJsonResponse(exchange, 401, "{\"success\":false,\"error\":\"Invalid admin credentials. Please check email and password.\"}");
             }
         }
     }
 
     static class AdminLogoutHandler implements HttpHandler {
-        @Override public void handle(HttpExchange exchange) throws IOException {
+        @Override
+        public void handle(HttpExchange exchange) throws IOException {
             if (!"POST".equalsIgnoreCase(exchange.getRequestMethod())) {
-                sendJsonResponse(exchange, 405, "{\"success\":false,\"error\":\"Method Not Allowed\"}"); return;
+                sendJsonResponse(exchange, 405, "{\"success\":false,\"error\":\"Method Not Allowed\"}");
+                return;
             }
-            String sessionId = exchange.getRequestHeaders().getFirst("X-Session-Token");
-            if (sessionId == null) sessionId = getSessionIdFromCookie(exchange);
-            if (sessionId != null) activeSessions.remove(sessionId);
+
+            String sessionId = getSessionIdFromCookie(exchange);
+            if (sessionId != null) {
+                activeSessions.remove(sessionId);
+            }
             clearSessionCookie(exchange);
-            sendJsonResponse(exchange, 200, "{\"success\":true,\"message\":\"Logged out.\"}");
+            sendJsonResponse(exchange, 200, "{\"success\":true,\"message\":\"Logged out successfully.\"}");
         }
     }
 
     static class AdminSessionHandler implements HttpHandler {
-        @Override public void handle(HttpExchange exchange) throws IOException {
+        @Override
+        public void handle(HttpExchange exchange) throws IOException {
             if (!"GET".equalsIgnoreCase(exchange.getRequestMethod())) {
-                sendJsonResponse(exchange, 405, "{\"success\":false,\"error\":\"Method Not Allowed\"}"); return;
+                sendJsonResponse(exchange, 405, "{\"success\":false,\"error\":\"Method Not Allowed\"}");
+                return;
             }
+
             AdminSession session = validateSession(exchange);
             if (session != null) {
                 sendJsonResponse(exchange, 200, String.format("{\"authenticated\":true,\"email\":\"%s\",\"sessionToken\":\"%s\"}", escapeJson(session.email), session.sessionId));
             } else {
-                sendJsonResponse(exchange, 401, "{\"authenticated\":false,\"error\":\"No active session\"}");
+                sendJsonResponse(exchange, 401, "{\"authenticated\":false,\"error\":\"No active admin session\"}");
             }
         }
     }
 
     // =========================================================================
-    // Protected Admin Node Handlers
+    // Admin Protected Endpoints
     // =========================================================================
     static class AddNodeHandler implements HttpHandler {
-        @Override public void handle(HttpExchange exchange) throws IOException {
+        @Override
+        public void handle(HttpExchange exchange) throws IOException {
             if (!"POST".equalsIgnoreCase(exchange.getRequestMethod())) {
-                sendJsonResponse(exchange, 405, "{\"success\":false,\"error\":\"Method Not Allowed\"}"); return;
+                sendJsonResponse(exchange, 405, "{\"success\":false,\"error\":\"Method Not Allowed\"}");
+                return;
             }
-            if (validateSession(exchange) == null) {
-                sendJsonResponse(exchange, 401, "{\"success\":false,\"error\":\"Unauthorized.\"}"); return;
+
+            AdminSession session = validateSession(exchange);
+            if (session == null) {
+                sendJsonResponse(exchange, 401, "{\"success\":false,\"error\":\"Unauthorized. Active admin session required.\"}");
+                return;
             }
-            Map<String, String> p = parseJsonBody(readStream(exchange.getRequestBody()));
-            String id = p.getOrDefault("id", "node_" + System.currentTimeMillis());
-            Location loc = new Location(id, p.getOrDefault("name", "New Building"),
-                    p.getOrDefault("code", "NEW"), p.getOrDefault("category", "Academic"),
-                    Integer.parseInt(p.getOrDefault("x", "500")), Integer.parseInt(p.getOrDefault("y", "400")),
-                    Integer.parseInt(p.getOrDefault("floors", "2")), Boolean.parseBoolean(p.getOrDefault("accessible", "true")),
-                    p.getOrDefault("description", "New facility."), p.getOrDefault("icon", "🏢"));
-            locations.add(loc); locationMap.put(id, loc);
+
+            String body = readStream(exchange.getRequestBody());
+            Map<String, String> params = parseJsonBody(body);
+
+            String id = params.getOrDefault("id", "node_" + System.currentTimeMillis());
+            String name = params.getOrDefault("name", "New Building");
+            String code = params.getOrDefault("code", "NEW");
+            String category = params.getOrDefault("category", "Academic");
+            int x = Integer.parseInt(params.getOrDefault("x", "500"));
+            int y = Integer.parseInt(params.getOrDefault("y", "400"));
+            int floors = Integer.parseInt(params.getOrDefault("floors", "2"));
+            boolean accessible = Boolean.parseBoolean(params.getOrDefault("accessible", "true"));
+            String description = params.getOrDefault("description", "Newly added campus facility.");
+            String icon = params.getOrDefault("icon", "🏢");
+
+            Location newLoc = new Location(id, name, code, category, x, y, floors, accessible, description, icon);
+            locations.add(newLoc);
+            locationMap.put(id, newLoc);
+
             saveDataToDisk();
-            sendJsonResponse(exchange, 200, String.format("{\"success\":true,\"nodeId\":\"%s\"}", id));
+
+            String jsonResponse = String.format("{\"success\":true,\"message\":\"Node added successfully\",\"nodeId\":\"%s\"}", id);
+            sendJsonResponse(exchange, 200, jsonResponse);
         }
     }
 
     static class DeleteNodeHandler implements HttpHandler {
-        @Override public void handle(HttpExchange exchange) throws IOException {
+        @Override
+        public void handle(HttpExchange exchange) throws IOException {
             if (!"POST".equalsIgnoreCase(exchange.getRequestMethod())) {
-                sendJsonResponse(exchange, 405, "{\"success\":false,\"error\":\"Method Not Allowed\"}"); return;
+                sendJsonResponse(exchange, 405, "{\"success\":false,\"error\":\"Method Not Allowed\"}");
+                return;
             }
-            if (validateSession(exchange) == null) {
-                sendJsonResponse(exchange, 401, "{\"success\":false,\"error\":\"Unauthorized.\"}"); return;
+
+            AdminSession session = validateSession(exchange);
+            if (session == null) {
+                sendJsonResponse(exchange, 401, "{\"success\":false,\"error\":\"Unauthorized. Active admin session required.\"}");
+                return;
             }
-            Map<String, String> p = parseJsonBody(readStream(exchange.getRequestBody()));
-            String id = p.get("id");
+
+            String body = readStream(exchange.getRequestBody());
+            Map<String, String> params = parseJsonBody(body);
+            String id = params.get("id");
+
             if (id == null || !locationMap.containsKey(id)) {
-                sendJsonResponse(exchange, 400, "{\"success\":false,\"error\":\"Node not found.\"}"); return;
+                sendJsonResponse(exchange, 400, "{\"success\":false,\"error\":\"Node ID not found.\"}");
+                return;
             }
+
             locations.removeIf(l -> l.id.equals(id));
             locationMap.remove(id);
             routes.removeIf(r -> r.from.equals(id) || r.to.equals(id));
+
             saveDataToDisk();
-            sendJsonResponse(exchange, 200, String.format("{\"success\":true,\"message\":\"Deleted '%s'\"}", id));
+
+            String jsonResponse = String.format("{\"success\":true,\"message\":\"Node '%s' and connected routes deleted successfully\"}", id);
+            sendJsonResponse(exchange, 200, jsonResponse);
         }
     }
 
     // =========================================================================
-    // Dijkstra Route Navigation
+    // Multi-Mode Accessibility Route Calculation (Dijkstra)
     // =========================================================================
     static class NavigateHandler implements HttpHandler {
-        @Override public void handle(HttpExchange exchange) throws IOException {
+        @Override
+        public void handle(HttpExchange exchange) throws IOException {
             Map<String, String> params = parseQueryParams(exchange.getRequestURI().getQuery());
-            String from = params.get("from"), to = params.get("to");
-            boolean accessibleOnly = Boolean.parseBoolean(params.getOrDefault("accessible", "false"));
+            String from = params.get("from");
+            String to = params.get("to");
+            String mode = params.getOrDefault("mode", "shortest").toLowerCase();
+            boolean legacyAccessible = Boolean.parseBoolean(params.getOrDefault("accessible", "false"));
 
-            if (from == null || to == null || !locationMap.containsKey(from) || !locationMap.containsKey(to)) {
-                sendJsonResponse(exchange, 400, "{\"success\":false,\"error\":\"Invalid from/to.\"}"); return;
+            if (legacyAccessible && "shortest".equals(mode)) {
+                mode = "wheelchair";
             }
 
-            Map<String, Integer> dist = new HashMap<>();
+            if (from == null || to == null || !locationMap.containsKey(from) || !locationMap.containsKey(to)) {
+                sendJsonResponse(exchange, 400, "{\"success\":false,\"error\":\"Invalid 'from' or 'to' parameters. Locations must exist.\"}");
+                return;
+            }
+
+            Map<String, Double> dist = new HashMap<>();
             Map<String, String> prevNode = new HashMap<>();
             Map<String, Route> prevEdge = new HashMap<>();
-            for (Location l : locations) dist.put(l.id, Integer.MAX_VALUE);
-            dist.put(from, 0);
 
-            PriorityQueue<NodeDist> pq = new PriorityQueue<>(Comparator.comparingInt(n -> n.d));
-            pq.add(new NodeDist(from, 0));
+            for (Location loc : locations) {
+                dist.put(loc.id, Double.MAX_VALUE);
+            }
+            dist.put(from, 0.0);
+
+            PriorityQueue<NodeCost> pq = new PriorityQueue<>(Comparator.comparingDouble(n -> n.cost));
+            pq.add(new NodeCost(from, 0.0));
 
             while (!pq.isEmpty()) {
-                NodeDist curr = pq.poll();
-                if (curr.d > dist.get(curr.id)) continue;
-                if (curr.id.equals(to)) break;
+                NodeCost curr = pq.poll();
+                if (curr.cost > dist.get(curr.nodeId)) continue;
+                if (curr.nodeId.equals(to)) break;
+
                 for (Route r : routes) {
-                    if (accessibleOnly && !r.accessible) continue;
-                    String nb = r.from.equals(curr.id) ? r.to : r.to.equals(curr.id) ? r.from : null;
-                    if (nb != null) {
-                        int nd = curr.d + r.distance;
-                        if (nd < dist.getOrDefault(nb, Integer.MAX_VALUE)) {
-                            dist.put(nb, nd); prevNode.put(nb, curr.id); prevEdge.put(nb, r);
-                            pq.add(new NodeDist(nb, nd));
+                    // Filter based on mode
+                    if ("wheelchair".equals(mode)) {
+                        if (!r.accessible || r.hasStairs) continue;
+                    }
+
+                    String neighbor = null;
+                    if (r.from.equals(curr.nodeId)) neighbor = r.to;
+                    else if (r.to.equals(curr.nodeId)) neighbor = r.from;
+
+                    if (neighbor != null) {
+                        double weight = r.distance;
+                        if ("wheelchair".equals(mode)) {
+                            if (r.type.toLowerCase().contains("ramp")) weight *= 0.8;
+                        } else if ("visually_impaired".equals(mode)) {
+                            if (r.tactilePaving) weight *= 0.7;
+                        } else if ("safest".equals(mode)) {
+                            weight = r.distance * (6.0 - r.safetyScore);
+                        }
+
+                        double newDist = curr.cost + weight;
+                        if (newDist < dist.getOrDefault(neighbor, Double.MAX_VALUE)) {
+                            dist.put(neighbor, newDist);
+                            prevNode.put(neighbor, curr.nodeId);
+                            prevEdge.put(neighbor, r);
+                            pq.add(new NodeCost(neighbor, newDist));
                         }
                     }
                 }
             }
 
-            if (dist.get(to) == Integer.MAX_VALUE) {
-                sendJsonResponse(exchange, 404, "{\"success\":false,\"error\":\"No path found.\"}"); return;
+            if (dist.get(to) == Double.MAX_VALUE) {
+                sendJsonResponse(exchange, 404, "{\"success\":false,\"error\":\"No path found matching selected accessibility mode criteria.\"}");
+                return;
             }
 
             List<String> nodePath = new ArrayList<>();
             List<Route> edgePath = new ArrayList<>();
             String curr = to;
-            while (curr != null) { nodePath.add(0, curr); Route e = prevEdge.get(curr); if (e != null) edgePath.add(0, e); curr = prevNode.get(curr); }
-
-            int totalTime = 0;
-            StringBuilder dirs = new StringBuilder("[");
-            for (int i = 0; i < edgePath.size(); i++) {
-                Route r = edgePath.get(i); totalTime += r.time;
-                dirs.append(String.format("{\"step\":%d,\"from\":\"%s\",\"to\":\"%s\",\"distance\":%d,\"time\":%d,\"type\":\"%s\",\"accessible\":%b,\"instruction\":\"Walk along %s from %s towards %s\"}",
-                        i+1, escapeJson(locationMap.get(nodePath.get(i)).name), escapeJson(locationMap.get(nodePath.get(i+1)).name),
-                        r.distance, r.time, escapeJson(r.type), r.accessible, escapeJson(r.type),
-                        escapeJson(locationMap.get(nodePath.get(i)).name), escapeJson(locationMap.get(nodePath.get(i+1)).name)));
-                if (i < edgePath.size() - 1) dirs.append(",");
+            while (curr != null) {
+                nodePath.add(0, curr);
+                Route edge = prevEdge.get(curr);
+                if (edge != null) {
+                    edgePath.add(0, edge);
+                }
+                curr = prevNode.get(curr);
             }
-            dirs.append("]");
 
-            StringBuilder np = new StringBuilder("[");
-            for (int i = 0; i < nodePath.size(); i++) { np.append("\"").append(nodePath.get(i)).append("\""); if (i < nodePath.size()-1) np.append(","); }
-            np.append("]");
+            int totalDist = 0;
+            int totalTime = 0;
+            StringBuilder directionsJson = new StringBuilder("[");
 
-            sendJsonResponse(exchange, 200, String.format("{\"success\":true,\"from\":\"%s\",\"to\":\"%s\",\"accessibleOnly\":%b,\"totalDistance\":%d,\"totalTime\":%d,\"nodePath\":%s,\"directions\":%s}",
-                    from, to, accessibleOnly, dist.get(to), totalTime, np, dirs));
+            for (int i = 0; i < edgePath.size(); i++) {
+                Route r = edgePath.get(i);
+                totalDist += r.distance;
+                totalTime += r.time;
+                String stepFrom = locationMap.get(nodePath.get(i)).name;
+                String stepTo = locationMap.get(nodePath.get(i + 1)).name;
+
+                String spokenText = String.format("Go straight along %s from %s towards %s.", r.type, stepFrom, stepTo);
+                if ("wheelchair".equals(mode)) {
+                    spokenText = String.format("Follow accessible ramp pathway along %s from %s to %s.", r.type, stepFrom, stepTo);
+                } else if ("visually_impaired".equals(mode)) {
+                    spokenText = String.format("Follow tactile strip along %s towards %s.", r.type, stepTo);
+                }
+
+                String instruction = String.format("Walk along %s from %s towards %s", r.type, stepFrom, stepTo);
+                directionsJson.append(String.format(
+                        "{\"step\":%d,\"from\":\"%s\",\"to\":\"%s\",\"distance\":%d,\"time\":%d,\"type\":\"%s\",\"accessible\":%b,\"instruction\":\"%s\",\"spokenText\":\"%s\"}",
+                        i + 1, escapeJson(stepFrom), escapeJson(stepTo), r.distance, r.time, escapeJson(r.type), r.accessible, escapeJson(instruction), escapeJson(spokenText)
+                ));
+                if (i < edgePath.size() - 1) directionsJson.append(",");
+            }
+            directionsJson.append("]");
+
+            StringBuilder nodePathJson = new StringBuilder("[");
+            for (int i = 0; i < nodePath.size(); i++) {
+                nodePathJson.append("\"").append(nodePath.get(i)).append("\"");
+                if (i < nodePath.size() - 1) nodePathJson.append(",");
+            }
+            nodePathJson.append("]");
+
+            String jsonResponse = String.format(
+                    "{\"success\":true,\"from\":\"%s\",\"to\":\"%s\",\"mode\":\"%s\",\"accessibleOnly\":%b,\"totalDistance\":%d,\"totalTime\":%d,\"nodePath\":%s,\"directions\":%s}",
+                    from, to, mode, "wheelchair".equals(mode), totalDist, totalTime, nodePathJson.toString(), directionsJson.toString()
+            );
+
+            sendJsonResponse(exchange, 200, jsonResponse);
         }
     }
 
-    static class NodeDist { String id; int d; NodeDist(String id, int d) { this.id = id; this.d = d; } }
+    static class NodeCost {
+        String nodeId;
+        double cost;
+
+        NodeCost(String nodeId, double cost) {
+            this.nodeId = nodeId;
+            this.cost = cost;
+        }
+    }
 
     // =========================================================================
     // Utilities
     // =========================================================================
-    private static void sendJsonResponse(HttpExchange e, int code, String json) throws IOException {
-        byte[] r = json.getBytes(StandardCharsets.UTF_8);
-        e.getResponseHeaders().add("Content-Type", "application/json; charset=UTF-8");
-        e.sendResponseHeaders(code, r.length);
-        try (OutputStream os = e.getResponseBody()) { os.write(r); }
+    private static void sendJsonResponse(HttpExchange exchange, int statusCode, String jsonResponse) throws IOException {
+        byte[] response = jsonResponse.getBytes(StandardCharsets.UTF_8);
+        exchange.getResponseHeaders().add("Content-Type", "application/json; charset=UTF-8");
+        exchange.sendResponseHeaders(statusCode, response.length);
+        try (OutputStream os = exchange.getResponseBody()) {
+            os.write(response);
+        }
     }
 
     private static Map<String, String> parseQueryParams(String query) {
         Map<String, String> result = new HashMap<>();
-        if (query == null) return result;
-        for (String p : query.split("&")) { String[] kv = p.split("="); if (kv.length > 1) result.put(kv[0], kv[1]); else if (kv.length == 1) result.put(kv[0], ""); }
+        if (query == null || query.isEmpty()) return result;
+        for (String param : query.split("&")) {
+            String[] pair = param.split("=");
+            if (pair.length > 1) {
+                result.put(pair[0], pair[1]);
+            } else if (pair.length == 1) {
+                result.put(pair[0], "");
+            }
+        }
         return result;
     }
 
     private static Map<String, String> parseJsonBody(String body) {
         Map<String, String> result = new HashMap<>();
         if (body == null || body.trim().isEmpty()) return result;
-        Matcher m = Pattern.compile("\"([^\"]+)\"\\s*:\\s*(?:\"([^\"]*)\"|(true|false)|(\\d+))").matcher(body);
-        while (m.find()) result.put(m.group(1), m.group(2) != null ? m.group(2) : m.group(3) != null ? m.group(3) : m.group(4));
+
+        Pattern p = Pattern.compile("\"([^\"]+)\"\\s*:\\s*(?:\"([^\"]*)\"|(true|false)|(\\d+))");
+        Matcher m = p.matcher(body);
+        while (m.find()) {
+            String key = m.group(1);
+            String val = m.group(2) != null ? m.group(2) : (m.group(3) != null ? m.group(3) : m.group(4));
+            result.put(key, val);
+        }
         return result;
     }
 
     private static String readStream(InputStream is) throws IOException {
-        ByteArrayOutputStream out = new ByteArrayOutputStream();
-        byte[] buf = new byte[1024]; int n;
-        while ((n = is.read(buf)) != -1) out.write(buf, 0, n);
-        return out.toString(StandardCharsets.UTF_8.name());
+        ByteArrayOutputStream result = new ByteArrayOutputStream();
+        byte[] buffer = new byte[1024];
+        int length;
+        while ((length = is.read(buffer)) != -1) {
+            result.write(buffer, 0, length);
+        }
+        return result.toString(StandardCharsets.UTF_8.name());
     }
 
     private static String escapeJson(String s) {
